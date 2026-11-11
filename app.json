@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "focket",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -26,11 +26,33 @@
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Focket cần camera để bạn chụp và chia sẻ món ăn.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Focket cần vị trí của bạn để ghim và gợi ý quán ăn gần đây."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FFF7EE",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Focket cần truy cập thư viện ảnh để bạn gửi ảnh món ăn trong tin nhắn.",
+          "cameraPermission": "Focket cần camera để bạn chụp và chia sẻ món ăn.",
+          "microphonePermission": false
         }
       ]
     ],

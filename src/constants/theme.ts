@@ -1,65 +1,40 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://unistyl.es/), etc.
- */
+// Focket — tông "lá dong & caramel": xanh lá dong làm màu chính, caramel nâu vàng cho điểm nhấn,
+// nền màu bánh chưng / giấy gạo. Cảm giác ẩm thực Việt, tách hẳn khỏi các app chia sẻ ảnh nền đen.
+export const colors = {
+  bg: '#F6F0E1', // nền bánh chưng
+  surface: '#FFFCF5', // thẻ, ô nhập, nút tròn
+  surfaceHigh: '#EDE3CC', // nền phụ
+  border: '#E2D5B8',
+  overlay: 'rgba(36,26,18,0.5)', // nền mờ đè lên ảnh
+  text: '#241A12', // nâu đen
+  textMuted: '#7A6650',
+  onPhoto: '#FFFFFF', // chữ / icon đè lên ảnh
 
-import '@/global.css';
+  accent: '#1E5631', // xanh lá dong — màu chính (nút, tab đang chọn)
+  accentDark: '#133A21',
+  accentSoft: '#DCEBD9', // lá non — chip đang chọn, nền nhạt
+  onAccent: '#FFFFFF',
 
-import { Platform } from 'react-native';
+  caramel: '#C8892E', // điểm nhấn: nút phụ, huy hiệu, sao
+  caramelSoft: '#F5E3C3',
+  brown: '#6B4423', // nước màu — nút tối, chữ đậm
+  star: '#C8892E',
 
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+  fresh: '#3E8E4E',
+  danger: '#B83227',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
+export const radius = {
+  viewfinder: 32,
+  card: 20,
+  pill: 999,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+/** Bóng đổ nhẹ cho thẻ trên nền sáng */
+export const shadow = {
+  shadowColor: '#3B2A14',
+  shadowOpacity: 0.12,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 3,
+} as const;

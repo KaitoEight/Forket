@@ -30,7 +30,8 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (chứa key Supabase — dùng .env.example làm mẫu)
+.env
 .env*.local
 
 # typescript
