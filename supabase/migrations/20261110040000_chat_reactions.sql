@@ -1,4 +1,4 @@
--- Focket: chat giữa bạn bè + thả cảm xúc (reaction) lên ảnh
+-- Forket: chat giữa bạn bè + thả cảm xúc (reaction) lên ảnh
 -- Chạy SAU file 20261110030000_accounts_friends_reviews.sql (Supabase Dashboard → SQL Editor).
 
 -- =========================================================

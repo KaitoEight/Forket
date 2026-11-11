@@ -1,4 +1,4 @@
--- Focket: tối ưu bản đồ quán ăn
+-- Forket: tối ưu bản đồ quán ăn
 -- Chạy SAU file 20261110000000_create_posts.sql (Supabase Dashboard → SQL Editor).
 
 -- 1. Ảnh thumbnail nhỏ (240px) để làm marker trên bản đồ, đỡ tải ảnh 1080px

@@ -73,7 +73,7 @@ export default function SignInScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.logo}>🍜</Text>
-        <Text style={styles.title}>Focket</Text>
+        <Text style={styles.title}>Forket</Text>
         <Text style={styles.subtitle}>Chụp món ngon, gửi ngay cho bạn bè</Text>
 
         <View style={styles.tabs}>

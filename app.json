@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Focket",
-    "slug": "Focket",
+    "name": "Forket",
+    "slug": "Forket",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "focket",
+    "scheme": "forket",
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -28,7 +28,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Focket cần camera để bạn chụp và chia sẻ món ăn.",
+          "cameraPermission": "Forket cần camera để bạn chụp và chia sẻ món ăn.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -36,7 +36,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Focket cần vị trí của bạn để ghim và gợi ý quán ăn gần đây."
+          "locationWhenInUsePermission": "Forket cần vị trí của bạn để ghim và gợi ý quán ăn gần đây."
         }
       ],
       [
@@ -50,8 +50,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Focket cần truy cập thư viện ảnh để bạn gửi ảnh món ăn trong tin nhắn.",
-          "cameraPermission": "Focket cần camera để bạn chụp và chia sẻ món ăn.",
+          "photosPermission": "Forket cần truy cập thư viện ảnh để bạn gửi ảnh món ăn trong tin nhắn.",
+          "cameraPermission": "Forket cần camera để bạn chụp và chia sẻ món ăn.",
           "microphonePermission": false
         }
       ]

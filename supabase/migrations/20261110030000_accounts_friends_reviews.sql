@@ -1,4 +1,4 @@
--- Focket: tài khoản, kết bạn, đánh giá quán
+-- Forket: tài khoản, kết bạn, đánh giá quán
 -- Chạy SAU các file migration trước (Supabase Dashboard → SQL Editor).
 --
 -- ⚠️ Sau khi chạy, bài đăng chỉ hiện cho chủ bài + bạn bè.

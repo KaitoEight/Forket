@@ -1,4 +1,4 @@
--- Focket: bảng bài đăng ảnh món ăn (kiểu Locket) + bucket lưu ảnh
+-- Forket: bảng bài đăng ảnh món ăn (kiểu Locket) + bucket lưu ảnh
 -- Chạy file này trong Supabase Dashboard → SQL Editor.
 
 -- 1. Bảng posts

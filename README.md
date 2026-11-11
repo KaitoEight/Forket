@@ -1,56 +1,76 @@
-# Welcome to your Expo app 👋
+# 🍃 Forket
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Forket là app chia sẻ món ăn với bạn bè. Bạn chụp món đang ăn, gắn quán theo GPS rồi gửi cho bạn bè. Ảnh của mọi người hiện trên bảng tin và trên bản đồ quán ăn.
 
-## Get started
+Dự án làm cho vui, viết bằng **Expo (React Native)** và dùng **Supabase** làm backend.
 
-1. Install dependencies
+## Tính năng
 
-   ```bash
-   npm install
-   ```
+- **Check-in món ăn**: chụp ảnh vuông, viết lời nhắn, chọn quán gần đây (bán kính tự giãn theo sai số GPS) hoặc ghim quán mới, rồi chấm sao nhanh.
+- **Bản đồ quán ăn**: dùng MapLibre và OpenFreeMap (dữ liệu OpenStreetMap), **không cần API key**. Có tìm quán, bộ lọc, marker hiện ảnh và điểm, nút chỉ đường.
+- **Bảng tin**: ảnh của bạn và bạn bè, cập nhật theo realtime. Bạn có thể thả cảm xúc, trả lời ảnh, và xoá ảnh của mình.
+- **Bạn bè và chat**: kết bạn bằng `@username`, chat 1-1 có emoji, gửi ảnh và trả lời ảnh.
+- **Đánh giá quán**: chấm 1–5 sao kèm bình luận. Mỗi người 1 đánh giá cho mỗi quán.
+- **Hồ sơ**: xem quán đã đi, các món đã check-in và đánh giá của mình.
 
-2. Start the app
+Quyền riêng tư được chặn ngay trên database bằng Row Level Security: chỉ bạn bè mới xem ảnh và nhắn tin được cho nhau.
 
-   ```bash
-   npx expo start
-   ```
+## Chạy thử
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 1. Cài đặt
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+### 2. Tạo project Supabase
 
-### Other setup steps
+1. Tạo project mới tại [supabase.com](https://supabase.com).
+2. Vào **SQL Editor** và chạy lần lượt các file trong [`supabase/migrations`](supabase/migrations) **theo thứ tự tên file** (từ cũ đến mới).
+3. Vào **Authentication → Sign In / Providers → Email**, tắt **Confirm email**. Nếu bật, người dùng phải bấm link xác nhận trong email trước khi đăng nhập được.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 3. Khai báo biến môi trường
 
-## Learn more
+Sao chép [`.env.example`](.env.example) thành `.env`, rồi điền URL và anon key lấy ở **Project Settings → API**:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 4. Chạy app
 
-## Join the community
+```bash
+npm start               # cùng mạng Wi-Fi
+npm run start:tunnel    # khác mạng (4G, Wi-Fi khác…)
+```
 
-Join our community of developers creating universal apps.
+Quét mã QR bằng **Expo Go** trên điện thoại. Mọi thư viện native mà app dùng đều có sẵn trong Expo Go, nên không cần development build.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Cấu trúc thư mục
+
+```
+src/
+  app/            # màn hình (Expo Router)
+    (tabs)/       # Bản đồ · Bảng tin · Tin nhắn · Hồ sơ
+    camera.tsx    # check-in món mới
+    chat/[id].tsx # khung chat 1-1
+  components/     # thanh tab, bản đồ, sao đánh giá…
+  services/       # gọi Supabase: bài đăng, quán, bạn bè, chat, đánh giá
+  lib/            # Supabase client, đăng nhập
+supabase/
+  migrations/     # schema + RLS, chạy theo thứ tự
+  scripts/        # script dọn dữ liệu chạy 1 lần
+```
+
+## Kiểm tra code
+
+```bash
+npx tsc --noEmit   # typecheck
+npx expo lint      # lint
+```
+
+## Ghi chú
+
+- Ảnh nằm trong bucket Storage công khai. Danh sách bài đăng đã được bảo vệ, nhưng ai có đúng đường link ảnh vẫn mở được.
+- Tile bản đồ lấy từ [OpenFreeMap](https://openfreemap.org), dữ liệu © [OpenStreetMap](https://www.openstreetmap.org/copyright).

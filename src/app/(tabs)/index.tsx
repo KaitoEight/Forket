@@ -243,7 +243,7 @@ export default function MapScreen() {
           )}
           <View style={styles.brandPill}>
             <Ionicons name="leaf" size={12} color={colors.accent} />
-            <Text style={styles.brandPillText}>Focket</Text>
+            <Text style={styles.brandPillText}>Forket</Text>
           </View>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>

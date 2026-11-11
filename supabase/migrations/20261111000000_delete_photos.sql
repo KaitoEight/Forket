@@ -1,4 +1,4 @@
--- Focket: cho phép xoá ảnh của chính mình (bài đăng + file trong Storage)
+-- Forket: cho phép xoá ảnh của chính mình (bài đăng + file trong Storage)
 -- Chạy SAU các migration trước (Supabase Dashboard → SQL Editor).
 
 -- Bài đăng: chủ bài được xoá (đã có từ migration tài khoản, tạo lại cho chắc)

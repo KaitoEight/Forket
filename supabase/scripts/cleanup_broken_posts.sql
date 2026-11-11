@@ -1,4 +1,4 @@
--- Focket: dọn các bài đăng có ảnh rỗng (lỗi upload từ Android, file ~14 byte)
+-- Forket: dọn các bài đăng có ảnh rỗng (lỗi upload từ Android, file ~14 byte)
 -- Chạy 1 lần trong Supabase Dashboard → SQL Editor.
 
 -- 1. Xem trước các bài sẽ bị xoá

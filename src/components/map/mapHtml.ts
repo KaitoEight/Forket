@@ -11,8 +11,8 @@ const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
  * Trang HTML chứa bản đồ MapLibre GL. Chạy trong WebView (iOS/Android) hoặc iframe (web).
  *
  * Giao tiếp:
- *  - RN → bản đồ: window.__focket.handle(cmd)  (hoặc postMessage {__focketCmd})
- *  - bản đồ → RN: ReactNativeWebView.postMessage / parent.postMessage {__focketMap}
+ *  - RN → bản đồ: window.__forket.handle(cmd)  (hoặc postMessage {__forketCmd})
+ *  - bản đồ → RN: ReactNativeWebView.postMessage / parent.postMessage {__forketMap}
  */
 export function buildMapHtml(center: LatLng, zoom: number) {
   return `<!doctype html>
@@ -66,7 +66,7 @@ export function buildMapHtml(center: LatLng, zoom: number) {
   function send(msg) {
     var s = JSON.stringify(msg);
     if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(s);
-    else if (window.parent !== window) window.parent.postMessage({ __focketMap: s }, '*');
+    else if (window.parent !== window) window.parent.postMessage({ __forketMap: s }, '*');
   }
   function esc(v) {
     return String(v).replace(/[&<>"']/g, function (c) {
@@ -186,7 +186,7 @@ export function buildMapHtml(center: LatLng, zoom: number) {
     emitViewport();
   });
 
-  window.__focket = {
+  window.__forket = {
     handle: function (cmd) {
       switch (cmd.type) {
         case 'places': return setPlaces(cmd.places);
@@ -197,7 +197,7 @@ export function buildMapHtml(center: LatLng, zoom: number) {
     }
   };
   window.addEventListener('message', function (e) {
-    if (e.data && e.data.__focketCmd) window.__focket.handle(e.data.__focketCmd);
+    if (e.data && e.data.__forketCmd) window.__forket.handle(e.data.__forketCmd);
   });
 
   send({ type: 'ready' });

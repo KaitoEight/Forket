@@ -201,7 +201,7 @@ export default function CameraScreen() {
       <View style={[styles.screen, styles.permission]}>
         <StatusBar style="dark" />
         <Ionicons name="camera" size={56} color={colors.accent} />
-        <Text style={styles.permissionTitle}>Focket cần dùng camera</Text>
+        <Text style={styles.permissionTitle}>Forket cần dùng camera</Text>
         <Text style={styles.permissionText}>
           để bạn chụp và chia sẻ món ngon cùng bạn bè.
         </Text>

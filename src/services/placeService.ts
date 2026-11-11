@@ -84,7 +84,7 @@ async function reverseGeocode(latitude: number, longitude: number) {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&accept-language=vi`,
-      { headers: { 'User-Agent': 'Focket/1.0' } }
+      { headers: { 'User-Agent': 'Forket/1.0' } }
     );
     const data = await res.json();
     return (data.display_name as string) || '';

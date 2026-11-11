@@ -155,7 +155,7 @@ export default function ChatScreen() {
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Cần quyền camera', 'Cho phép Focket dùng camera trong Cài đặt để chụp ảnh gửi bạn bè.');
+          Alert.alert('Cần quyền camera', 'Cho phép Forket dùng camera trong Cài đặt để chụp ảnh gửi bạn bè.');
           return;
         }
       }

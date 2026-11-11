@@ -24,7 +24,7 @@ export default function FreeFoodMap(props: FoodMapProps) {
 
   const deliver = useCallback((cmd: MapCommand) => {
     webRef.current?.injectJavaScript(
-      `window.__focket && window.__focket.handle(${JSON.stringify(cmd)}); true;`
+      `window.__forket && window.__forket.handle(${JSON.stringify(cmd)}); true;`
     );
   }, []);
 

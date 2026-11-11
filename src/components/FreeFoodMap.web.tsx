@@ -13,7 +13,7 @@ export default function FreeFoodMap(props: FoodMapProps) {
   const [html] = useState(() => buildMapHtml(initialCenter, initialZoom));
 
   const deliver = useCallback((cmd: MapCommand) => {
-    frameRef.current?.contentWindow?.postMessage({ __focketCmd: cmd }, '*');
+    frameRef.current?.contentWindow?.postMessage({ __forketCmd: cmd }, '*');
   }, []);
 
   const handleRaw = useMapBridge(props, deliver);
@@ -21,7 +21,7 @@ export default function FreeFoodMap(props: FoodMapProps) {
   useEffect(() => {
     const listener = (e: MessageEvent) => {
       if (e.source !== frameRef.current?.contentWindow) return;
-      if (e.data && typeof e.data.__focketMap === 'string') handleRaw(e.data.__focketMap);
+      if (e.data && typeof e.data.__forketMap === 'string') handleRaw(e.data.__forketMap);
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);

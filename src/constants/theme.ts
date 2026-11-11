@@ -1,4 +1,4 @@
-// Focket — tông "lá dong & caramel": xanh lá dong làm màu chính, caramel nâu vàng cho điểm nhấn,
+// Forket — tông "lá dong & caramel": xanh lá dong làm màu chính, caramel nâu vàng cho điểm nhấn,
 // nền màu bánh chưng / giấy gạo. Cảm giác ẩm thực Việt, tách hẳn khỏi các app chia sẻ ảnh nền đen.
 export const colors = {
   bg: '#F6F0E1', // nền bánh chưng

@@ -1,4 +1,4 @@
--- Focket: gửi ảnh trong chat
+-- Forket: gửi ảnh trong chat
 -- Chạy SAU file 20261110040000_chat_reactions.sql (Supabase Dashboard → SQL Editor).
 
 -- 1. Tin nhắn có thể chỉ có ảnh (không cần chữ)

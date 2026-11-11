@@ -1,4 +1,4 @@
--- Focket: bật Realtime cho bảng posts để ảnh người khác gửi hiện ngay lập tức
+-- Forket: bật Realtime cho bảng posts để ảnh người khác gửi hiện ngay lập tức
 -- Chạy trong Supabase Dashboard → SQL Editor.
 
 do $$
