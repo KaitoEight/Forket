@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,11 +16,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { IconButton } from '@/components/IconButton';
-import { colors, radius } from '@/constants/theme';
-import { signOut, useAuth, type Profile } from '@/lib/auth';
+import { colors, radius, statusBarStyle } from '@/constants/theme';
+import { useAuth, type Profile } from '@/lib/auth';
 import {
   acceptFriendRequest,
+  blockUser,
   fetchFriendships,
+  findUserByCode,
   removeFriendship,
   searchUsers,
   sendFriendRequest,
@@ -29,6 +30,9 @@ import {
   type FriendEntry,
   type Relation,
 } from '@/services/friendService';
+import { appAlert } from '@/lib/appAlert';
+import { parseFriendCode } from '@/services/profileService';
+import { goBack } from '@/lib/navigation';
 
 export default function FriendsScreen() {
   const insets = useSafeAreaInsets();
@@ -80,13 +84,19 @@ export default function FriendsScreen() {
         return;
       }
       setSearching(true);
-      searchUsers(q)
-        .then(setResults)
+      // Gõ / dán mã kết bạn (8 ký tự hoặc link forket://add/…) → tìm thêm theo mã
+      const code = parseFriendCode(q);
+      const byCode = code && code.length === 8 ? findUserByCode(code).catch(() => null) : Promise.resolve(null);
+      Promise.all([searchUsers(q).catch(() => [] as Profile[]), byCode])
+        .then(([found, coded]) => {
+          const list = coded && coded.id !== userId ? [coded, ...found.filter((u) => u.id !== coded.id)] : found;
+          setResults(list);
+        })
         .catch((e) => console.warn('Tìm kiếm lỗi:', e?.message ?? e))
         .finally(() => setSearching(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, userId]);
 
   const byUser = useMemo(() => new Map(entries.map((e) => [e.user.id, e])), [entries]);
   const incoming = entries.filter((e) => e.relation === 'incoming');
@@ -99,14 +109,14 @@ export default function FriendsScreen() {
       await action();
       await reload();
     } catch (e: any) {
-      Alert.alert('Không thực hiện được', e?.message ?? String(e));
+      appAlert('Không thực hiện được', e?.message ?? String(e));
     } finally {
       setBusyId(null);
     }
   };
 
   const confirmUnfriend = (entry: FriendEntry) =>
-    Alert.alert('Huỷ kết bạn?', `Bạn và ${entry.user.display_name} sẽ không thấy ảnh của nhau nữa.`, [
+    appAlert('Huỷ kết bạn?', `Bạn và ${entry.user.display_name} sẽ không thấy ảnh của nhau nữa.`, [
       { text: 'Thôi', style: 'cancel' },
       {
         text: 'Huỷ kết bạn',
@@ -115,10 +125,29 @@ export default function FriendsScreen() {
       },
     ]);
 
-  const confirmSignOut = () =>
-    Alert.alert('Đăng xuất?', undefined, [
-      { text: 'Thôi', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: () => signOut() },
+  const friendMenu = (entry: FriendEntry) =>
+    appAlert(entry.user.display_name, `@${entry.user.username}`, [
+      {
+        text: 'Xem hồ sơ',
+        icon: 'person-circle-outline',
+        onPress: () => router.push({ pathname: '/user/[id]', params: { id: entry.user.id } }),
+      },
+      { text: 'Huỷ kết bạn', icon: 'person-remove-outline', style: 'destructive', onPress: () => confirmUnfriend(entry) },
+      {
+        text: 'Chặn',
+        icon: 'ban-outline',
+        style: 'destructive',
+        onPress: () =>
+          appAlert(
+            `Chặn ${entry.user.display_name}?`,
+            'Hai bạn sẽ huỷ kết bạn, không tìm thấy nhau và không nhắn tin được.',
+            [
+              { text: 'Thôi', style: 'cancel' },
+              { text: 'Chặn', style: 'destructive', onPress: () => run(entry.user.id, () => blockUser(entry.user.id)) },
+            ]
+          ),
+      },
+      { text: 'Đóng', style: 'cancel' },
     ]);
 
   const actionFor = (user: Profile) => {
@@ -164,11 +193,11 @@ export default function FriendsScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle} />
       <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Quay lại camera" onPress={() => router.back()} />
+        <IconButton icon="chevron-back" label="Quay lại" onPress={() => goBack()} />
         <Text style={styles.title}>Bạn bè</Text>
-        <IconButton icon="log-out-outline" label="Đăng xuất" onPress={confirmSignOut} />
+        <IconButton icon="qr-code-outline" label="Kết bạn bằng QR" onPress={() => router.push('/qr')} />
       </View>
 
       <ScrollView
@@ -188,7 +217,7 @@ export default function FriendsScreen() {
       >
         {profile && (
           <View style={styles.meCard}>
-            <Avatar name={profile.display_name} seed={profile.username} size={56} />
+            <Avatar name={profile.display_name} seed={profile.username} uri={profile.avatar_url} size={56} />
             <View style={styles.flex}>
               <Text style={styles.meName}>{profile.display_name}</Text>
               <Text style={styles.meUser}>@{profile.username}</Text>
@@ -199,13 +228,22 @@ export default function FriendsScreen() {
           </View>
         )}
 
+        <Pressable style={styles.qrBanner} onPress={() => router.push('/qr')}>
+          <Ionicons name="qr-code" size={22} color={colors.accent} />
+          <View style={styles.flex}>
+            <Text style={styles.qrTitle}>Kết bạn bằng mã QR</Text>
+            <Text style={styles.qrSub}>Đưa mã của bạn hoặc quét mã của bạn bè</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Tìm @username hoặc tên"
+            placeholder="Tìm @username, tên hoặc mã kết bạn"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -271,7 +309,7 @@ export default function FriendsScreen() {
                     key={e.friendshipId}
                     user={e.user}
                     action={
-                      <Pressable hitSlop={8} accessibilityLabel="Tuỳ chọn" onPress={() => confirmUnfriend(e)}>
+                      <Pressable hitSlop={8} accessibilityLabel="Tuỳ chọn" onPress={() => friendMenu(e)}>
                         <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
                       </Pressable>
                     }
@@ -317,7 +355,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function UserRow({ user, action }: { user: Profile; action: React.ReactNode }) {
   return (
     <View style={styles.row}>
-      <Avatar name={user.display_name} seed={user.username} />
+      <Pressable
+        style={styles.rowMain}
+        onPress={() => router.push({ pathname: '/user/[id]', params: { id: user.id } })}
+      >
+      <Avatar name={user.display_name} seed={user.username} uri={user.avatar_url} />
       <View style={styles.flex}>
         <Text style={styles.rowName} numberOfLines={1}>
           {user.display_name}
@@ -326,6 +368,7 @@ function UserRow({ user, action }: { user: Profile; action: React.ReactNode }) {
           @{user.username}
         </Text>
       </View>
+      </Pressable>
       {action}
     </View>
   );
@@ -409,6 +452,17 @@ const styles = StyleSheet.create({
   sectionBody: { gap: 4 },
   empty: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  qrBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 18,
+    padding: 14,
+  },
+  qrTitle: { color: colors.accent, fontWeight: '800', fontSize: 15 },
+  qrSub: { color: colors.text, fontSize: 13, marginTop: 1 },
   rowName: { color: colors.text, fontWeight: '700', fontSize: 15 },
   rowUser: { color: colors.textMuted, fontSize: 13, marginTop: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 12 },

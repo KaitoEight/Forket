@@ -11,13 +11,16 @@ export type Post = {
   image_url: string;
   caption: string | null;
   created_at: string;
+  /** Món ăn + giá (VND) ghi lúc check-in */
+  dish?: string | null;
+  price?: number | null;
   place: { id: string; name: string; address: string | null } | null;
-  author: { id: string; username: string; display_name: string } | null;
+  author: { id: string; username: string; display_name: string; avatar_url?: string | null } | null;
   reactions: Reaction[];
 };
 
 const POST_FIELDS =
-  'id, image_url, caption, created_at, place:places(id, name, address), author:profiles(id, username, display_name), reactions(emoji, user_id, user:profiles(display_name, username))';
+  'id, image_url, caption, created_at, dish, price, place:places(id, name, address), author:profiles(id, username, display_name, avatar_url), reactions(emoji, user_id, user:profiles(display_name, username))';
 
 const BUCKET = 'photos';
 const OUTPUT_SIZE = 1080;
@@ -74,6 +77,9 @@ export async function createPost(input: {
   placeId: string | null;
   lat?: number;
   lng?: number;
+  dish?: string;
+  /** Giá tiền (VND) */
+  price?: number | null;
 }) {
   const userId = await requireUserId();
   const name = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
@@ -90,18 +96,26 @@ export async function createPost(input: {
     place_id: input.placeId,
     lat: input.lat,
     lng: input.lng,
+    dish: input.dish?.trim() || null,
+    price: input.price ?? null,
   };
-  let { error } = await supabase.from('posts').insert(row);
-  // Chưa chạy migration thêm cột thumb_url → lưu không có thumbnail
-  if (error?.code === 'PGRST204') {
-    const { thumb_url: _unused, ...withoutThumb } = row;
-    ({ error } = await supabase.from('posts').insert(withoutThumb));
+  // Server chưa chạy migration thêm cột (thumb_url, dish, price) → bỏ cột thiếu và lưu tiếp
+  let current: Record<string, unknown> = row;
+  let { error } = await supabase.from('posts').insert(current);
+  for (let i = 0; i < 3 && error?.code === 'PGRST204'; i++) {
+    const missing = error.message.match(/'([a-z_]+)' column/)?.[1];
+    if (!missing || !(missing in current)) break;
+    const { [missing]: _dropped, ...rest } = current;
+    current = rest;
+    ({ error } = await supabase.from('posts').insert(current));
   }
   if (error) throw error;
 }
 
 // Dùng khi chưa chạy migration chat/reactions (chưa có bảng reactions)
 const POST_FIELDS_NO_REACTIONS = POST_FIELDS.replace(/, reactions\(.*\)$/, '');
+// Dùng khi chưa chạy migration món + giá (chưa có cột dish, price)
+const withoutDish = (fields: string) => fields.replace(' dish, price,', '');
 
 function normalize(row: any): Post {
   return { ...row, reactions: row.reactions ?? [] } as Post;
@@ -112,7 +126,8 @@ async function selectPosts<T>(
   build: (fields: string) => PromiseLike<{ data: T; error: { code?: string } | null }>
 ) {
   let res = await build(POST_FIELDS);
-  if (res.error?.code === 'PGRST200') res = await build(POST_FIELDS_NO_REACTIONS);
+  if (res.error?.code === '42703') res = await build(withoutDish(POST_FIELDS));
+  if (res.error?.code === 'PGRST200') res = await build(withoutDish(POST_FIELDS_NO_REACTIONS));
   if (res.error) throw res.error;
   return res.data;
 }
@@ -192,15 +207,27 @@ export function mergePosts(current: Post[], incoming: Post[]) {
   return [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
-export async function fetchPostsByPlace(placeId: string, limit = 20) {
-  const { data, error } = await supabase
-    .from('posts')
-    .select('id, image_url, caption, created_at')
-    .eq('place_id', placeId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+/** Ảnh của 1 quán (kèm người chụp) — để hiện trên thẻ quán và xem toàn màn hình */
+export type PlacePhoto = {
+  id: string;
+  image_url: string;
+  thumb_url?: string | null;
+  caption: string | null;
+  created_at: string;
+  dish?: string | null;
+  price?: number | null;
+  author: { id: string; username: string; display_name: string; avatar_url: string | null } | null;
+};
+
+export async function fetchPostsByPlace(placeId: string, limit = 30): Promise<PlacePhoto[]> {
+  const query = (fields: string) =>
+    supabase.from('posts').select(fields).eq('place_id', placeId).order('created_at', { ascending: false }).limit(limit);
+  const fields =
+    'id, image_url, thumb_url, caption, created_at, dish, price, author:profiles(id, username, display_name, avatar_url)';
+  let { data, error } = await query(fields);
+  if (error?.code === '42703') ({ data, error } = await query(fields.replace(' dish, price,', '')));
   if (error) throw error;
-  return (data ?? []) as Omit<Post, 'place' | 'author' | 'reactions'>[];
+  return (data ?? []) as unknown as PlacePhoto[];
 }
 
 export function timeAgo(iso: string) {

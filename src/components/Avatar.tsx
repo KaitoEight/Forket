@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 
 const PALETTE = ['#FF8A65', '#4FC3F7', '#81C784', '#BA68C8', '#FFD54F', '#F06292', '#4DB6AC', '#9575CD'];
@@ -16,8 +17,18 @@ function initials(name: string) {
   return (first + last).toUpperCase();
 }
 
-/** Avatar tròn bằng chữ cái đầu, màu cố định theo username */
-export function Avatar({ name, seed, size = 40 }: { name: string; seed: string; size?: number }) {
+/** Avatar tròn: ảnh đại diện nếu có, không thì chữ cái đầu (màu cố định theo username) */
+export function Avatar({
+  name,
+  seed,
+  size = 40,
+  uri,
+}: {
+  name: string;
+  seed: string;
+  size?: number;
+  uri?: string | null;
+}) {
   return (
     <View
       style={[
@@ -25,12 +36,16 @@ export function Avatar({ name, seed, size = 40 }: { name: string; seed: string; 
         { width: size, height: size, borderRadius: size / 2, backgroundColor: colorFor(seed) },
       ]}
     >
-      <Text style={[styles.text, { fontSize: size * 0.4 }]}>{initials(name)}</Text>
+      {uri ? (
+        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+      ) : (
+        <Text style={[styles.text, { fontSize: size * 0.4 }]}>{initials(name)}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  circle: { alignItems: 'center', justifyContent: 'center' },
+  circle: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   text: { color: '#1A1A1A', fontWeight: '800' },
 });

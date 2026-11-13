@@ -49,3 +49,25 @@ export async function deleteMyReview(placeId: string) {
     .eq('user_id', userId);
   if (error) throw error;
 }
+
+/** Lắng nghe đánh giá của 1 quán thay đổi (thêm/sửa/xoá). Trả về hàm huỷ. */
+export function subscribeToReviews(placeId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`reviews-${placeId}-${Math.random().toString(36).slice(2)}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'reviews', filter: `place_id=eq.${placeId}` },
+      onChange
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'reviews', filter: `place_id=eq.${placeId}` },
+      onChange
+    )
+    // DELETE không lọc theo cột được → tải lại khi có bất kỳ đánh giá nào bị xoá (RLS đã lọc)
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reviews' }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

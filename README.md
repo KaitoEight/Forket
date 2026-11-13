@@ -6,14 +6,27 @@ Dự án làm cho vui, viết bằng **Expo (React Native)** và dùng **Supabas
 
 ## Tính năng
 
-- **Check-in món ăn**: chụp ảnh vuông, viết lời nhắn, chọn quán gần đây (bán kính tự giãn theo sai số GPS) hoặc ghim quán mới, rồi chấm sao nhanh.
-- **Bản đồ quán ăn**: dùng MapLibre và OpenFreeMap (dữ liệu OpenStreetMap), **không cần API key**. Có tìm quán, bộ lọc, marker hiện ảnh và điểm, nút chỉ đường.
+- **Check-in món ăn**: chụp ảnh vuông, viết lời nhắn, chọn quán gần đây (bán kính tự giãn theo sai số GPS) hoặc ghim quán mới kèm loại quán, rồi chấm sao nhanh.
+- **Bản đồ quán ăn**: dùng MapLibre và OpenFreeMap (dữ liệu OpenStreetMap), **không cần API key**.
+  - Tìm quán theo tên trên toàn bộ dữ liệu (không cần gõ dấu). Bấm vào ô tìm kiếm sẽ thấy quán *đã đi gần đây* và *đi nhiều nhất*.
+  - Lọc theo Đồ ăn / Đồ uống và từng loại (cà phê, bún/phở…), theo ảnh, theo điểm, và theo **quán bạn bè đã đi**.
+  - Bấm ảnh trên thẻ quán để xem toàn màn hình. Người ghim quán sửa được tên/địa chỉ/loại, xoá quán khi chưa ai khác dùng, hoặc bỏ quyền quản lý.
 - **Bảng tin**: ảnh của bạn và bạn bè, cập nhật theo realtime. Bạn có thể thả cảm xúc, trả lời ảnh, và xoá ảnh của mình.
-- **Bạn bè và chat**: kết bạn bằng `@username`, chat 1-1 có emoji, gửi ảnh và trả lời ảnh.
-- **Đánh giá quán**: chấm 1–5 sao kèm bình luận. Mỗi người 1 đánh giá cho mỗi quán.
-- **Hồ sơ**: xem quán đã đi, các món đã check-in và đánh giá của mình.
+- **Bạn bè**: kết bạn bằng `@username` hoặc **mã QR** (`forket://add/<mã>`), chặn người dùng.
+- **Hồ sơ**: ảnh đại diện, bio, quán đã đi. Xem hồ sơ bạn bè và lịch sử quán của họ.
+- **Chat**: chat 1-1 và **chat nhóm** (thành viên nào cũng thêm được bạn bè của mình), gửi ảnh, emoji, gửi **card quán** hoặc **lời rủ đi ăn** kèm vote Đi / Thôi.
+- **Cài đặt & quyền riêng tư**: sửa hồ sơ, đổi mật khẩu, chế độ riêng tư (bạn bè không thấy ảnh, quán đã đi và đánh giá), chỉ cho tìm qua QR, danh sách chặn, xoá tài khoản.
+- **Thông báo**: chuông thông báo trong app (kết bạn, cảm xúc, bình luận, nhắc tên `@bạn` / `@all` trong nhóm, bảng tính tiền) và **thông báo đẩy** khi app đóng (cần development build + `eas init`, xem bên dưới).
+- **Muốn đi**: lưu quán để đi sau (nút trên thẻ quán, card quán trong chat), lọc trên bản đồ; bấm "Đi" ở lời rủ cũng tự lưu quán. Lời rủ có thể kèm **giờ hẹn** và nhắc trước 30 phút.
+- **Bình luận ảnh** trên Bảng tin; ghi **món + giá** lúc check-in (thẻ quán hiện "Món nên thử"); quán có **giờ mở cửa** và **mức giá**.
+- **Tổng kết năm** (Forket Wrapped) trong Hồ sơ, chia sẻ quán ra ngoài app (Zalo, Messenger…), báo cáo người dùng / ảnh / bình luận, giới hạn spam lời mời kết bạn.
+- **Must try ❤️**: danh sách quán nhất định phải thử (tách khỏi "Muốn đi", riêng tư — chỉ mình xem). Nút tim trên thẻ quán và card quán trong chat; xem lại ở Hồ sơ.
+- **Hôm nay ăn gì?**: **lắc máy** ở tab Bản đồ (hoặc bấm chip "Hôm nay ăn gì?") để random một quán trong bán kính 1 / 3 / 5km quanh bạn, trong Must try của bạn, và / hoặc trong Must try của một hay nhiều nhóm chat (chọn nhiều nguồn cùng lúc). Cần đã chạy `20261115000000_must_try.sql`.
+- **Minigame vòng quay trong chat** (menu "+" → "Minigame vòng quay"): **Ai trả tiền?**, **Chọn món — loại dần** (mỗi lần quay loại 1 món, món cuối thắng), **Chọn món — quay 1 lần**. Server chọn kết quả (không ai quay lại được), mọi máy cùng chạy animation theo realtime. Cần đã chạy `20261115010000_wheel_games.sql`.
+- **Chế độ tối** theo giao diện của máy (đọc lúc mở app; web luôn dùng nền sáng).
+- **Màn chào**: người mới xem 3 slide giới thiệu; người vừa đăng xuất thấy màn "Chào lại" chỉ cần nhập mật khẩu.
 
-Quyền riêng tư được chặn ngay trên database bằng Row Level Security: chỉ bạn bè mới xem ảnh và nhắn tin được cho nhau.
+Quyền riêng tư được chặn ngay trên database bằng Row Level Security: chỉ bạn bè (đang chia sẻ hoạt động) mới xem ảnh của nhau, chỉ thành viên mới đọc được tin nhắn.
 
 ## Chạy thử
 
@@ -54,7 +67,10 @@ src/
   app/            # màn hình (Expo Router)
     (tabs)/       # Bản đồ · Bảng tin · Tin nhắn · Hồ sơ
     camera.tsx    # check-in món mới
-    chat/[id].tsx # khung chat 1-1
+    chat/         # khung chat, tạo nhóm, thông tin nhóm
+    settings/     # cài đặt, hồ sơ, quyền riêng tư
+    user/[id].tsx # hồ sơ người khác
+    welcome.tsx   # màn chào (người mới / chào lại)
   components/     # thanh tab, bản đồ, sao đánh giá…
   services/       # gọi Supabase: bài đăng, quán, bạn bè, chat, đánh giá
   lib/            # Supabase client, đăng nhập
@@ -69,6 +85,16 @@ supabase/
 npx tsc --noEmit   # typecheck
 npx expo lint      # lint
 ```
+
+## Thông báo đẩy
+
+1. Chạy `20261114000000_push_notifications.sql` (bật extension `pg_net`, server tự gọi Expo Push API, không cần Edge Function).
+2. Chạy `npx eas-cli@latest init` một lần để có `projectId`, rồi build bằng `eas build --profile development` (Expo Go trên Android không nhận push từ xa).
+3. Đăng nhập trên máy thật, cho phép thông báo. Token được lưu ở bảng `push_tokens` và gỡ khi đăng xuất.
+
+## Kiểm tra quyền truy cập (RLS)
+
+Dán [`supabase/tests/rls_checks.sql`](supabase/tests/rls_checks.sql) vào SQL Editor. Script tạo 3 tài khoản giả, kiểm tra các tình huống bạn bè / người lạ / tắt chia sẻ / chặn / tin nhắn riêng / Must try của nhóm / vòng quay minigame, rồi tự hoàn tác. Kết quả cuối là `ALL RLS CHECKS PASSED (rolled back)` hoặc `FAILED: <quy tắc bị hở>`.
 
 ## Ghi chú
 

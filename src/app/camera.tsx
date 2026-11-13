@@ -6,10 +6,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,9 +19,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/IconButton';
+import { LocationPickerSheet } from '@/components/LocationPickerSheet';
 import { StarRating } from '@/components/StarRating';
-import { colors, radius } from '@/constants/theme';
+import { TagPicker } from '@/components/TagPicker';
+import { colors, radius, statusBarStyle } from '@/constants/theme';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
+import { usePinch } from '@/hooks/usePinch';
 import { useVerticalSwipe } from '@/hooks/useVerticalSwipe';
 import {
   contributeNewPlace,
@@ -32,10 +33,14 @@ import {
   getCurrentLocationAndAddress,
   searchRadiusFor,
   type CurrentLocation,
+  type MapPlace,
   type NearbyPlace,
 } from '@/services/placeService';
+import { MAX_AMOUNT, parseAmount } from '@/lib/money';
 import { createPost, squarePhoto } from '@/services/postService';
 import { saveReview } from '@/services/reviewService';
+import { appAlert } from '@/lib/appAlert';
+import { goBack } from '@/lib/navigation';
 
 type PlaceChoice = { kind: 'existing'; place: NearbyPlace } | { kind: 'new' } | null;
 
@@ -67,13 +72,30 @@ export default function CameraScreen() {
     presetPlace ? { kind: 'existing', place: presetPlace } : null
   );
   const [newPlaceName, setNewPlaceName] = useState('');
+  const [newPlaceTags, setNewPlaceTags] = useState<string[]>([]);
   const [rating, setRating] = useState(0);
+  const [dish, setDish] = useState('');
+  const [priceText, setPriceText] = useState('');
 
   const keyboard = useKeyboardVisible();
 
+  // Chọn vị trí thủ công (thay vì GPS)
+  const [locSheetOpen, setLocSheetOpen] = useState(false);
+
+  // Zoom camera bằng 2 ngón (0 = không zoom, 1 = tối đa)
+  const [zoom, setZoom] = useState(0);
+  const zoomStart = useRef(0);
+  const pinchHandlers = usePinch({
+    onStart: () => {
+      zoomStart.current = zoom;
+    },
+    onScale: (ratio) => setZoom(Math.min(1, Math.max(0, zoomStart.current + Math.log2(ratio) * 0.25))),
+    enabled: () => !photoUri,
+  });
+
   // Vuốt xuống (khi chưa chụp) → đóng camera
   const swipeHandlers = useVerticalSwipe({
-    onSwipeDown: () => router.back(),
+    onSwipeDown: () => goBack(),
     enabled: () => !photoUri && !keyboard.visible,
   });
 
@@ -111,6 +133,34 @@ export default function CameraScreen() {
     };
   }, []);
 
+  /** Đổi sang vị trí khác (địa chỉ / quán đã chọn, hoặc quay về GPS) và tải lại quán xung quanh */
+  const applyLocation = async (next: CurrentLocation, preferred?: NearbyPlace) => {
+    setLoc(next);
+    setLocFailed(false);
+    const radius = next.custom ? 150 : searchRadiusFor(next.accuracy);
+    const found = await fetchNearbyRecommendations(next.latitude, next.longitude, radius).catch((e) => {
+      console.warn('Không tải được quán gần đây:', e);
+      return [] as NearbyPlace[];
+    });
+    const list = preferred ? [preferred, ...found.filter((f) => f.id !== preferred.id)] : found;
+    setNearby(list);
+    // Đang tạo quán mới thì giữ nguyên; không thì chọn quán đã chọn / gần nhất ở vị trí mới
+    setChoice((prev) => (prev?.kind === 'new' ? prev : list[0] ? { kind: 'existing', place: list[0] } : null));
+  };
+
+  const useGps = async () => {
+    const current = await getCurrentLocationAndAddress();
+    await applyLocation(current);
+  };
+
+  const pickAddress = (next: CurrentLocation) => applyLocation(next);
+
+  const pickSavedPlace = (place: MapPlace) =>
+    applyLocation(
+      { latitude: place.lat, longitude: place.lng, accuracy: 0, address: place.address ?? place.name, custom: true },
+      { id: place.id, name: place.name, address: place.address, distance_meters: 0 }
+    );
+
   const takePhoto = async () => {
     if (!cameraRef.current || capturing) return;
     setCapturing(true);
@@ -118,7 +168,7 @@ export default function CameraScreen() {
       const pic = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       setPhotoUri(await squarePhoto(pic.uri, pic.width, pic.height));
     } catch (e: any) {
-      Alert.alert('Không chụp được ảnh', e?.message ?? String(e));
+      appAlert('Không chụp được ảnh', e?.message ?? String(e));
     } finally {
       setCapturing(false);
     }
@@ -128,6 +178,8 @@ export default function CameraScreen() {
     setPhotoUri(null);
     setCaption('');
     setRating(0);
+    setDish('');
+    setPriceText('');
   };
 
   const send = async () => {
@@ -137,8 +189,13 @@ export default function CameraScreen() {
       Keyboard.dismiss();
       return;
     }
+    const price = priceText.trim() ? parseAmount(priceText) : null;
+    if (priceText.trim() && (price === null || price > MAX_AMOUNT)) {
+      appAlert('Giá chưa hợp lệ', 'Nhập giá như 50000, 50k hoặc 1.5tr, hoặc để trống.');
+      return;
+    }
     if (choice?.kind === 'new' && !newPlaceName.trim()) {
-      Alert.alert('Thiếu tên quán', 'Nhập tên quán để ghim lên bản đồ nhé!');
+      appAlert('Thiếu tên quán', 'Nhập tên quán để ghim lên bản đồ nhé!');
       return;
     }
 
@@ -161,13 +218,15 @@ export default function CameraScreen() {
           newPlaceName,
           loc.latitude,
           loc.longitude,
-          loc.address
+          loc.address,
+          newPlaceTags
         );
         placeId = created.id;
         const added = { id: created.id, name: created.name, distance_meters: 0 };
         setNearby((prev) => [added, ...prev]);
         setChoice({ kind: 'existing', place: added });
         setNewPlaceName('');
+        setNewPlaceTags([]);
       }
 
       await createPost({
@@ -176,6 +235,8 @@ export default function CameraScreen() {
         placeId,
         lat: loc?.latitude,
         lng: loc?.longitude,
+        dish,
+        price,
       });
       // Chấm sao nhanh → lưu thành đánh giá của tôi cho quán (giữ bình luận cũ nếu có)
       if (placeId && rating > 0) {
@@ -185,10 +246,10 @@ export default function CameraScreen() {
       }
       discard();
       // Đóng camera → mở Bảng tin để thấy món vừa đăng
-      router.back();
+      goBack();
       router.navigate('/feed');
     } catch (e: any) {
-      Alert.alert('Gửi thất bại', e?.message ?? String(e));
+      appAlert('Gửi thất bại', e?.message ?? String(e));
     } finally {
       setSending(false);
     }
@@ -199,7 +260,7 @@ export default function CameraScreen() {
   if (!permission.granted) {
     return (
       <View style={[styles.screen, styles.permission]}>
-        <StatusBar style="dark" />
+        <StatusBar style={statusBarStyle} />
         <Ionicons name="camera" size={56} color={colors.accent} />
         <Text style={styles.permissionTitle}>Forket cần dùng camera</Text>
         <Text style={styles.permissionText}>
@@ -224,28 +285,41 @@ export default function CameraScreen() {
             : 'Đang tìm vị trí…';
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <StatusBar style="dark" />
+    <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      <StatusBar style={statusBarStyle} />
       <View
         style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}
         {...swipeHandlers}
       >
         {/* Thanh trên: đóng · vị trí */}
         <View style={styles.topBar}>
-          <IconButton icon="close" label="Đóng camera" onPress={() => router.back()} />
-          <View style={styles.locationPill}>
-            <Ionicons name="location" size={14} color={colors.accent} />
+          <IconButton icon="close" label="Đóng camera" onPress={() => goBack()} />
+          <Pressable
+            style={({ pressed }) => [styles.locationPill, pressed && styles.pillPressed]}
+            onPress={() => {
+              Keyboard.dismiss();
+              setLocSheetOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Vị trí: ${locationLabel}. Bấm để đổi`}
+          >
+            <Ionicons name={loc?.custom ? 'pin' : 'location'} size={14} color={loc?.custom ? colors.caramel : colors.accent} />
             <Text style={styles.locationText} numberOfLines={1}>
               {locationLabel}
             </Text>
-          </View>
+            <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+          </Pressable>
           <View style={styles.controlSpacer} />
         </View>
 
-        <View style={styles.center}>
+        <ScrollView
+          style={styles.centerScroll}
+          contentContainerStyle={styles.center}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!!photoUri}
+        >
           {/* Khung ảnh vuông bo góc — chạm vào ảnh để đóng bàn phím */}
           <Pressable
             style={[styles.viewfinder, { width: size, height: size }]}
@@ -256,13 +330,32 @@ export default function CameraScreen() {
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
             ) : (
-              <CameraView
-                ref={cameraRef}
-                style={StyleSheet.absoluteFill}
-                facing={facing}
-                flash={flash ? 'on' : 'off'}
-                mirror={facing === 'front'}
-              />
+              <View style={StyleSheet.absoluteFill} {...pinchHandlers}>
+                <CameraView
+                  ref={cameraRef}
+                  style={StyleSheet.absoluteFill}
+                  facing={facing}
+                  flash={flash ? 'on' : 'off'}
+                  mirror={facing === 'front'}
+                  zoom={zoom}
+                />
+              </View>
+            )}
+
+            {!photoUri && (
+              <View style={styles.zoomWrap} pointerEvents="box-none">
+                {zoom > 0.01 ? (
+                  <Pressable style={styles.zoomPill} onPress={() => setZoom(0)} accessibilityLabel="Đặt lại zoom">
+                    <Ionicons name="search" size={13} color={colors.onPhoto} />
+                    <View style={styles.zoomTrack}>
+                      <View style={[styles.zoomFill, { width: `${Math.round(zoom * 100)}%` }]} />
+                    </View>
+                    <Text style={styles.zoomText}>Đặt lại</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.zoomHint}>Chụm 2 ngón để zoom</Text>
+                )}
+              </View>
             )}
 
             {photoUri && (
@@ -335,6 +428,31 @@ export default function CameraScreen() {
                   autoFocus
                 />
               )}
+              {choice?.kind === 'new' && <TagPicker compact value={newPlaceTags} onChange={setNewPlaceTags} />}
+              {choice && (
+                <View style={styles.dishRow}>
+                  <TextInput
+                    style={[styles.newPlaceInput, styles.dishInput]}
+                    value={dish}
+                    onChangeText={setDish}
+                    placeholder="Món bạn ăn (không bắt buộc)"
+                    placeholderTextColor={colors.textMuted}
+                    maxLength={60}
+                    returnKeyType="next"
+                  />
+                  <TextInput
+                    style={[styles.newPlaceInput, styles.priceInput]}
+                    value={priceText}
+                    onChangeText={setPriceText}
+                    placeholder="Giá, vd 50k"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={14}
+                    returnKeyType="done"
+                    submitBehavior="blurAndSubmit"
+                  />
+                </View>
+              )}
               {choice && (
                 <View style={styles.ratingRow}>
                   <Text style={styles.ratingLabel}>Chấm điểm quán</Text>
@@ -342,15 +460,17 @@ export default function CameraScreen() {
                 </View>
               )}
               {choice?.kind === 'new' && loc && (
-                <Text style={[styles.gpsHint, loc.accuracy > 50 && styles.gpsHintWarn]}>
-                  {loc.accuracy > 50
-                    ? `GPS lệch ±${Math.round(loc.accuracy)}m — ra chỗ thoáng để ghim chính xác hơn`
-                    : `GPS chính xác ±${Math.round(loc.accuracy)}m`}
+                <Text style={[styles.gpsHint, !loc.custom && loc.accuracy > 50 && styles.gpsHintWarn]}>
+                  {loc.custom
+                    ? 'Quán mới sẽ được ghim đúng địa chỉ bạn đã chọn'
+                    : loc.accuracy > 50
+                      ? `GPS lệch ±${Math.round(loc.accuracy)}m — ra chỗ thoáng để ghim chính xác hơn`
+                      : `GPS chính xác ±${Math.round(loc.accuracy)}m`}
                 </Text>
               )}
             </View>
           )}
-        </View>
+        </ScrollView>
 
         {/* Hàng nút điều khiển. Đang gõ phím → chỉ hiện nút "Xong", không hiện nút Gửi */}
         <View style={styles.controls}>
@@ -405,6 +525,14 @@ export default function CameraScreen() {
 
         {!photoUri && <Text style={styles.hint}>Vuốt xuống để đóng</Text>}
       </View>
+      <LocationPickerSheet
+        visible={locSheetOpen}
+        onClose={() => setLocSheetOpen(false)}
+        current={loc}
+        onUseGps={useGps}
+        onPickAddress={pickAddress}
+        onPickPlace={pickSavedPlace}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -432,7 +560,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   locationText: { color: colors.text, fontWeight: '600', fontSize: 14, flexShrink: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  centerScroll: { flex: 1 },
+  center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  pillPressed: { opacity: 0.8 },
+  zoomWrap: { position: 'absolute', left: 0, right: 0, bottom: 14, alignItems: 'center' },
+  zoomPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.overlay,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+  },
+  zoomTrack: { width: 80, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
+  zoomFill: { height: 4, backgroundColor: colors.onPhoto },
+  zoomText: { color: colors.onPhoto, fontWeight: '700', fontSize: 12 },
+  zoomHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
   viewfinder: {
     borderRadius: radius.viewfinder,
     overflow: 'hidden',
@@ -455,6 +599,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   busy: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay },
+  dishRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+  dishInput: { flex: 1, marginHorizontal: 0 },
+  priceInput: { width: 110, marginHorizontal: 0 },
   placePicker: { width: '100%', gap: 10 },
   chips: { paddingHorizontal: 16, gap: 8 },
   chip: {

@@ -11,6 +11,8 @@ export type FriendEntry = {
 
 const PROFILE_FIELDS = 'id, username, display_name, avatar_url';
 
+export type { Profile };
+
 /** Tất cả quan hệ của tôi: bạn bè, lời mời đã gửi, lời mời nhận được */
 export async function fetchFriendships(): Promise<FriendEntry[]> {
   const me = await requireUserId();
@@ -34,11 +36,16 @@ export async function fetchFriendships(): Promise<FriendEntry[]> {
   });
 }
 
-/** Tìm người dùng theo username hoặc tên hiển thị (trừ chính mình) */
+/** Tìm người dùng theo username hoặc tên hiển thị (trừ chính mình, người ẩn khỏi tìm kiếm, người đã chặn) */
 export async function searchUsers(query: string): Promise<Profile[]> {
   const me = await requireUserId();
   const q = query.trim().replace(/^@/, '').replace(/[%_,()"\\]/g, '');
   if (q.length < 2) return [];
+  const rpc = await supabase.rpc('search_users', { q });
+  if (!rpc.error) return (rpc.data ?? []) as Profile[];
+  if (rpc.error.code !== 'PGRST202') throw rpc.error;
+
+  // Server chưa chạy migration quyền riêng tư → tìm trực tiếp như cũ
   const { data, error } = await supabase
     .from('profiles')
     .select(PROFILE_FIELDS)
@@ -82,6 +89,90 @@ export async function countIncomingRequests() {
     .eq('status', 'pending');
   if (error) throw error;
   return count ?? 0;
+}
+
+/** Tìm người theo mã kết bạn (quét QR) */
+export async function findUserByCode(code: string): Promise<Profile | null> {
+  const { data, error } = await supabase.rpc('find_user_by_code', { code });
+  if (error) {
+    if (error.code === 'PGRST202') {
+      throw new Error('Server chưa bật mã QR: hãy chạy file SQL 20261112000000_profile_privacy.sql trong Supabase.');
+    }
+    throw error;
+  }
+  return ((data ?? []) as Profile[])[0] ?? null;
+}
+
+/** Quan hệ giữa tôi và 1 người */
+export async function fetchRelation(userId: string): Promise<{ relation: Relation; friendshipId: string | null }> {
+  const me = await requireUserId();
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('id, status, requester_id')
+    .or(
+      `and(requester_id.eq.${me},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${me})`
+    )
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { relation: 'none', friendshipId: null };
+  const relation: Relation =
+    data.status === 'accepted' ? 'friends' : data.requester_id === me ? 'outgoing' : 'incoming';
+  return { relation, friendshipId: data.id };
+}
+
+/** Danh sách bạn bè (đã chấp nhận) */
+export async function fetchFriends(): Promise<Profile[]> {
+  return (await fetchFriendships()).filter((e) => e.relation === 'friends').map((e) => e.user);
+}
+
+// ---------- Chặn ----------
+
+export async function blockUser(userId: string) {
+  const { error } = await supabase.rpc('block_user', { target: userId });
+  if (error) {
+    if (error.code === 'PGRST202') {
+      throw new Error('Server chưa bật tính năng chặn: hãy chạy file SQL 20261112000000_profile_privacy.sql.');
+    }
+    throw error;
+  }
+}
+
+export async function unblockUser(userId: string) {
+  const me = await requireUserId();
+  const { error } = await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_id', userId);
+  if (error) throw error;
+}
+
+export async function fetchBlockedUsers(): Promise<Profile[]> {
+  const { data, error } = await supabase.rpc('get_blocked_users');
+  if (error) throw error;
+  return (data ?? []) as Profile[];
+}
+
+/** Tôi và người này có chặn nhau không (theo bất kỳ chiều nào) */
+export async function isBlockedBetween(userId: string) {
+  const me = await requireUserId();
+  const { data, error } = await supabase.rpc('is_blocked_between', { a: me, b: userId });
+  if (error) return false; // chưa chạy migration → coi như không chặn
+  return !!data;
+}
+
+/** Lắng nghe lời mời kết bạn MỚI gửi tới tôi (để hiện thông báo). Trả về hàm huỷ. */
+export function subscribeToIncomingRequests(userId: string, onRequest: (requesterId: string) => void) {
+  const channel = supabase
+    .channel(`friend-requests-${userId}-${Math.random().toString(36).slice(2)}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'friendships', filter: `addressee_id=eq.${userId}` },
+      (payload) => {
+        const row = payload.new as { requester_id?: string; status?: string };
+        if (row.requester_id && row.status === 'pending') onRequest(row.requester_id);
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /** Lắng nghe thay đổi lời mời/kết bạn liên quan tới tôi. Trả về hàm huỷ. */

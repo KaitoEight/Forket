@@ -1,10 +1,9 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,14 +13,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radius } from '@/constants/theme';
+import { IconButton } from '@/components/IconButton';
+import { colors, radius, statusBarStyle } from '@/constants/theme';
 import { signIn, signUp } from '@/lib/auth';
+import { appAlert } from '@/lib/appAlert';
 
 type Mode = 'signin' | 'signup';
 
 export default function SignInScreen() {
   const insets = useSafeAreaInsets();
-  const [mode, setMode] = useState<Mode>('signin');
+  const params = useLocalSearchParams<{ mode?: Mode }>();
+  const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -42,7 +44,7 @@ export default function SignInScreen() {
       if (isSignUp) {
         const { needsEmailConfirm } = await signUp({ email, password, username, displayName });
         if (needsEmailConfirm) {
-          Alert.alert(
+          appAlert(
             'Kiểm tra email',
             'Mở link xác nhận trong email rồi quay lại đăng nhập nhé.'
           );
@@ -62,19 +64,22 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle} />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 },
+          { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.backRow}>
+          {router.canGoBack() && <IconButton icon="chevron-back" label="Quay lại" onPress={() => router.back()} />}
+        </View>
         <Text style={styles.logo}>🍜</Text>
         <Text style={styles.title}>Forket</Text>
-        <Text style={styles.subtitle}>Chụp món ngon, gửi ngay cho bạn bè</Text>
+        <Text style={styles.subtitle}>Review chân thật, từ bạn bè</Text>
 
         <View style={styles.tabs}>
           {(['signin', 'signup'] as const).map((m) => (
@@ -173,6 +178,7 @@ function Field({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: 24, alignItems: 'center' },
+  backRow: { alignSelf: 'stretch', height: 52, marginBottom: 8 },
   logo: { fontSize: 56 },
   title: { color: colors.text, fontSize: 34, fontWeight: '900', marginTop: 8 },
   subtitle: { color: colors.textMuted, fontSize: 15, marginTop: 6, textAlign: 'center' },

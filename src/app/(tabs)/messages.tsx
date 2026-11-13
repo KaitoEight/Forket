@@ -6,16 +6,19 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
+import { GroupAvatar } from '@/components/GroupAvatar';
 import { IconButton } from '@/components/IconButton';
-import { colors, radius } from '@/constants/theme';
+import { colors, radius, statusBarStyle } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import {
   fetchConversations,
+  getDirectConversation,
   previewText,
-  subscribeToIncomingMessages,
+  subscribeToMessages,
   type Conversation,
 } from '@/services/chatService';
 import { timeAgo } from '@/services/postService';
+import { appAlert } from '@/lib/appAlert';
 
 export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
@@ -24,6 +27,7 @@ export default function ChatListScreen() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
 
   // Tải lại mỗi khi quay về màn này (VD: vừa đọc xong 1 cuộc trò chuyện) + khi có tin mới
   useFocusEffect(
@@ -40,7 +44,7 @@ export default function ChatListScreen() {
           .catch((e) => active && setError(e?.message ?? String(e)))
           .finally(() => active && setLoading(false));
       load();
-      const unsubscribe = subscribeToIncomingMessages(meId, load);
+      const unsubscribe = subscribeToMessages(() => load());
       return () => {
         active = false;
         unsubscribe();
@@ -48,31 +52,48 @@ export default function ChatListScreen() {
     }, [meId])
   );
 
+  const open = async (c: Conversation) => {
+    if (c.conversation_id) {
+      router.push({ pathname: '/chat/[id]', params: { id: c.conversation_id } });
+      return;
+    }
+    // Bạn bè chưa từng nhắn → tạo cuộc trò chuyện rồi mở
+    if (!c.other_id) return;
+    setOpening(c.other_id);
+    try {
+      const id = await getDirectConversation(c.other_id);
+      router.push({ pathname: '/chat/[id]', params: { id } });
+    } catch (e: any) {
+      appAlert('Không mở được chat', e?.message ?? String(e));
+    } finally {
+      setOpening(null);
+    }
+  };
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle} />
       <View style={styles.header}>
         <View style={styles.brand}>
           <Ionicons name="chatbubbles" size={20} color={colors.accent} />
           <Text style={styles.title}>Tin nhắn</Text>
         </View>
-        <IconButton icon="person-add" label="Kết bạn" onPress={() => router.push('/friends')} />
+        <View style={styles.headerActions}>
+          <IconButton icon="people-outline" label="Tạo nhóm" onPress={() => router.push('/chat/new-group')} />
+          <IconButton icon="person-add" label="Kết bạn" onPress={() => router.push('/friends')} />
+        </View>
       </View>
 
       {loading ? (
         <ActivityIndicator color={colors.text} style={styles.loader} />
       ) : error ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>
-            {error.includes('get_conversations')
-              ? 'Server chưa bật tính năng chat: hãy chạy file SQL 20261110040000_chat_reactions.sql trong Supabase.'
-              : `Không tải được: ${error}`}
-          </Text>
+          <Text style={styles.emptyText}>{`Không tải được: ${error}`}</Text>
         </View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyEmoji}>💬</Text>
-          <Text style={styles.emptyText}>Kết bạn để bắt đầu trò chuyện và trả lời ảnh của nhau.</Text>
+          <Text style={styles.emptyText}>Kết bạn để bắt đầu trò chuyện và rủ nhau đi ăn.</Text>
           <Pressable style={styles.primaryBtn} onPress={() => router.push('/friends')}>
             <Text style={styles.primaryText}>Tìm bạn bè</Text>
           </Pressable>
@@ -80,29 +101,49 @@ export default function ChatListScreen() {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(c) => c.friend_id}
+          keyExtractor={(c) => c.conversation_id ?? `friend-${c.other_id}`}
           contentContainerStyle={{ paddingBottom: 16 }}
           renderItem={({ item }) => {
             const unread = item.unread > 0;
+            // Chỉ dòng bạn bè (chưa có cuộc trò chuyện) mới có trạng thái "đang mở"; nhóm có other_id = null
+            const isOpening = !!item.other_id && opening === item.other_id;
             const fromMe = item.last_sender_id === meId;
+            const prefix = !item.last_at
+              ? ''
+              : fromMe
+                ? 'Bạn: '
+                : item.is_group && item.last_sender_name
+                  ? `${item.last_sender_name}: `
+                  : '';
             return (
               <Pressable
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.friend_id } })}
+                onPress={() => open(item)}
+                disabled={isOpening}
               >
-                <Avatar name={item.display_name} seed={item.username} size={52} />
+                {item.is_group ? (
+                  <GroupAvatar uri={item.other_avatar_url} size={52} />
+                ) : (
+                  <Avatar
+                    name={item.title}
+                    seed={item.other_username ?? item.title}
+                    uri={item.other_avatar_url}
+                    size={52}
+                  />
+                )}
                 <View style={styles.flex}>
                   <View style={styles.rowTop}>
                     <Text style={styles.name} numberOfLines={1}>
-                      {item.display_name}
+                      {item.title}
                     </Text>
+                    {item.is_group && <Text style={styles.time}>{item.member_count} người</Text>}
                     {item.last_at && <Text style={styles.time}>{timeAgo(item.last_at)}</Text>}
                   </View>
                   <View style={styles.rowTop}>
                     <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
-                      {fromMe && item.last_body ? 'Bạn: ' : ''}
-                      {previewText(item)}
+                      {item.is_group && !item.last_at ? 'Nhóm mới — nhắn gì đó đi!' : `${prefix}${previewText(item)}`}
                     </Text>
+                    {isOpening && <ActivityIndicator size="small" color={colors.accent} />}
                     {unread && (
                       <View style={styles.unread}>
                         <Text style={styles.unreadText}>{item.unread > 9 ? '9+' : item.unread}</Text>
@@ -129,6 +170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
+  headerActions: { flexDirection: 'row', gap: 8 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { color: colors.text, fontSize: 22, fontWeight: '900' },
   loader: { marginTop: 32 },

@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   RefreshControl,
@@ -19,9 +18,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { IconButton } from '@/components/IconButton';
+import { NotificationBell } from '@/components/NotificationBell';
 import { StarRating } from '@/components/StarRating';
-import { colors, radius } from '@/constants/theme';
-import { signOut, useAuth } from '@/lib/auth';
+import { colors, radius, statusBarStyle } from '@/constants/theme';
+import { useAuth } from '@/lib/auth';
 import { countIncomingRequests } from '@/services/friendService';
 import { deletePost, timeAgo } from '@/services/postService';
 import {
@@ -31,6 +31,7 @@ import {
   type MyPost,
   type MyReview,
 } from '@/services/profileService';
+import { appAlert } from '@/lib/appAlert';
 
 type Section = 'posts' | 'reviews';
 
@@ -73,7 +74,7 @@ export default function ProfileScreen() {
   );
 
   const confirmDelete = (post: MyPost) =>
-    Alert.alert('Xoá ảnh này?', 'Ảnh, lời nhắn và cảm xúc trên ảnh sẽ bị xoá vĩnh viễn.', [
+    appAlert('Xoá ảnh này?', 'Ảnh, lời nhắn và cảm xúc trên ảnh sẽ bị xoá vĩnh viễn.', [
       { text: 'Thôi', style: 'cancel' },
       {
         text: 'Xoá',
@@ -84,7 +85,7 @@ export default function ProfileScreen() {
             setPosts((prev) => prev.filter((p) => p.id !== post.id));
             setViewer(null);
           } catch (e: any) {
-            Alert.alert('Không xoá được', e?.message ?? String(e));
+            appAlert('Không xoá được', e?.message ?? String(e));
           }
         },
       },
@@ -93,21 +94,22 @@ export default function ProfileScreen() {
   const placesVisited = new Set(posts.map((p) => p.place?.id).filter(Boolean)).size;
   const tile = (width - 16 * 2 - 8 * 2) / 3;
 
-  const openSettings = () =>
-    Alert.alert(profile?.display_name ?? 'Tài khoản', `@${profile?.username ?? ''}`, [
-      { text: 'Đóng', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: () => signOut() },
-    ]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle} />
       <View style={styles.header}>
         <View style={styles.brand}>
           <Ionicons name="leaf" size={20} color={colors.accent} />
           <Text style={styles.brandText}>Hồ sơ</Text>
         </View>
-        <IconButton icon="settings-outline" label="Cài đặt" onPress={openSettings} />
+        <View style={styles.headerActions}>
+          <NotificationBell />
+          <IconButton icon="heart-outline" label="Must try" onPress={() => router.push('/must-try')} />
+          <IconButton icon="bookmark-outline" label="Quán muốn đi" onPress={() => router.push('/wishlist')} />
+          <IconButton icon="qr-code-outline" label="Mã QR kết bạn" onPress={() => router.push('/qr')} />
+          <IconButton icon="settings-outline" label="Cài đặt" onPress={() => router.push('/settings')} />
+        </View>
       </View>
 
       <ScrollView
@@ -127,7 +129,9 @@ export default function ProfileScreen() {
         {/* Ảnh đại diện + chỉ số */}
         <View style={styles.top}>
           <View style={styles.avatarRing}>
-            {profile && <Avatar name={profile.display_name} seed={profile.username} size={84} />}
+            {profile && (
+              <Avatar name={profile.display_name} seed={profile.username} uri={profile.avatar_url} size={84} />
+            )}
           </View>
           <View style={styles.stats}>
             <Stat value={placesVisited} label="Quán đã đi" />
@@ -139,6 +143,19 @@ export default function ProfileScreen() {
         <View style={styles.identity}>
           <Text style={styles.name}>{profile?.display_name}</Text>
           <Text style={styles.username}>@{profile?.username}</Text>
+          {profile?.bio ? (
+            <Text style={styles.bio}>{profile.bio}</Text>
+          ) : (
+            <Pressable onPress={() => router.push('/settings/profile')} hitSlop={6}>
+              <Text style={styles.addBio}>+ Thêm bio</Text>
+            </Pressable>
+          )}
+          {profile?.share_activity === false && (
+            <View style={styles.privateChip}>
+              <Ionicons name="eye-off" size={13} color={colors.textMuted} />
+              <Text style={styles.privateText}>Chế độ riêng tư: bạn bè không thấy hoạt động của bạn</Text>
+            </View>
+          )}
           {reviews.length > 0 && (
             <View style={styles.tasteChip}>
               <Ionicons name="restaurant" size={13} color={colors.brown} />
@@ -168,6 +185,15 @@ export default function ProfileScreen() {
             )}
           </Pressable>
         </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.wrappedBtn, pressed && styles.pressed]}
+          onPress={() => router.push('/wrapped')}
+        >
+          <Ionicons name="sparkles" size={16} color={colors.caramel} />
+          <Text style={styles.wrappedText}>Tổng kết {new Date().getFullYear()} của bạn</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </Pressable>
 
         {/* Chuyển giữa ảnh món ăn và đánh giá */}
         <View style={styles.segment}>
@@ -252,7 +278,11 @@ export default function ProfileScreen() {
                 </Pressable>
                 <Pressable
                   style={[styles.viewerBtn, styles.viewerDelete]}
-                  onPress={() => confirmDelete(viewer)}
+                  onPress={() => {
+                    const target = viewer;
+                    setViewer(null);
+                    setTimeout(() => confirmDelete(target), 300);
+                  }}
                 >
                   <Ionicons name="trash-outline" size={18} color="#fff" />
                   <Text style={styles.viewerBtnText}>Xoá ảnh</Text>
@@ -315,6 +345,21 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  bio: { color: colors.text, fontSize: 14, lineHeight: 20, marginTop: 4 },
+  addBio: { color: colors.accent, fontSize: 14, fontWeight: '700', marginTop: 4 },
+  privateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceHigh,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    marginTop: 4,
+  },
+  privateText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   brandText: { color: colors.text, fontSize: 22, fontWeight: '900' },
   content: { padding: 16, gap: 16, paddingBottom: 32 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 14 },
@@ -385,6 +430,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reqBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  wrappedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.caramelSoft,
+  },
+  wrappedText: { flex: 1, color: colors.brown, fontWeight: '800', fontSize: 14 },
   segment: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   segmentBtn: {
     flex: 1,

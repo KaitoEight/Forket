@@ -1,28 +1,93 @@
 import type { Session } from '@supabase/supabase-js';
-import { createContext, use, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
 
+import { saveLastAccount } from './lastAccount';
+import { unregisterPush } from './push';
 import { supabase } from './supabase';
 
+/** Thông tin công khai tối thiểu của 1 người dùng */
 export type Profile = {
   id: string;
   username: string;
   display_name: string;
   avatar_url: string | null;
+  bio?: string | null;
+};
+
+/** Hồ sơ của chính tôi (thêm các cài đặt riêng tư) */
+export type MyProfile = Profile & {
+  bio: string | null;
+  share_activity: boolean;
+  discoverable: 'everyone' | 'qr_only';
+  friend_code: string | null;
 };
 
 type AuthState = {
   session: Session | null;
-  profile: Profile | null;
+  profile: MyProfile | null;
   /** true cho tới khi đọc xong phiên đăng nhập đã lưu */
   loading: boolean;
+  /** Tải lại hồ sơ (sau khi sửa tên, bio, cài đặt…) */
+  refreshProfile: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState>({ session: null, profile: null, loading: true });
+const AuthContext = createContext<AuthState>({
+  session: null,
+  profile: null,
+  loading: true,
+  refreshProfile: async () => {},
+});
+
+const MY_FIELDS = 'id, username, display_name, avatar_url, bio, share_activity, discoverable, friend_code';
+const BASIC_FIELDS = 'id, username, display_name, avatar_url';
+
+async function fetchMyProfile(userId: string): Promise<MyProfile | null> {
+  let res = await supabase.from('profiles').select(MY_FIELDS).eq('id', userId).maybeSingle();
+  // Server chưa chạy migration hồ sơ/quyền riêng tư → dùng các cột cơ bản
+  if (res.error?.code === '42703') {
+    res = (await supabase.from('profiles').select(BASIC_FIELDS).eq('id', userId).maybeSingle()) as typeof res;
+  }
+  if (res.error) {
+    console.warn('Không tải được hồ sơ:', res.error.message);
+    return null;
+  }
+  const d = res.data as Partial<MyProfile> | null;
+  if (!d) return null;
+  return {
+    id: d.id!,
+    username: d.username!,
+    display_name: d.display_name!,
+    avatar_url: d.avatar_url ?? null,
+    bio: d.bio ?? null,
+    share_activity: d.share_activity ?? true,
+    discoverable: d.discoverable ?? 'everyone',
+    friend_code: d.friend_code ?? null,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<MyProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const applyProfile = useCallback((s: Session | null, p: MyProfile | null) => {
+    setProfile(p);
+    // Nhớ tài khoản này để lần sau đăng xuất hiện màn "Chào lại"
+    if (s?.user.email && p) {
+      saveLastAccount({
+        email: s.user.email,
+        username: p.username,
+        display_name: p.display_name,
+        avatar_url: p.avatar_url,
+      });
+    }
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return;
+    applyProfile(data.session, await fetchMyProfile(data.session.user.id));
+  }, [applyProfile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,13 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         return;
       }
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url')
-        .eq('id', s.user.id)
-        .maybeSingle();
-      if (error) console.warn('Không tải được hồ sơ:', error.message);
-      if (!cancelled) setProfile(data);
+      const p = await fetchMyProfile(s.user.id);
+      if (!cancelled) applyProfile(s, p);
     };
 
     supabase.auth.getSession().then(async ({ data }) => {
@@ -58,9 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [applyProfile]);
 
-  return <AuthContext value={{ session, profile, loading }}>{children}</AuthContext>;
+  return (
+    <AuthContext value={{ session, profile, loading, refreshProfile }}>{children}</AuthContext>
+  );
 }
 
 export function useAuth() {
@@ -141,5 +203,6 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signOut() {
+  await unregisterPush();
   await supabase.auth.signOut();
 }

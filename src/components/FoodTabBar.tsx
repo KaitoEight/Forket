@@ -5,9 +5,9 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/theme';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { useAuth } from '@/lib/auth';
-import { countUnreadMessages, subscribeToIncomingMessages } from '@/services/chatService';
-import { countIncomingRequests, subscribeToFriendships } from '@/services/friendService';
+import { countUnreadMessages, subscribeToMessages } from '@/services/chatService';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -23,7 +23,8 @@ export function FoodTabBar({ state, emitter, navigateToTab, insets }: BottomTabB
   const { session } = useAuth();
   const userId = session?.user.id;
   const [unread, setUnread] = useState(0);
-  const [requests, setRequests] = useState(0);
+  // Chấm đỏ trên tab Hồ sơ = thông báo chưa đọc (lời mời kết bạn, cảm xúc, nhắc tên…)
+  const requests = useUnreadNotifications();
 
   useEffect(() => {
     if (!userId) return;
@@ -32,18 +33,13 @@ export function FoodTabBar({ state, emitter, navigateToTab, insets }: BottomTabB
       countUnreadMessages()
         .then((n) => active && setUnread(n))
         .catch(() => {});
-    const refreshRequests = () =>
-      countIncomingRequests()
-        .then((n) => active && setRequests(n))
-        .catch(() => {});
     refreshUnread();
-    refreshRequests();
-    const unsubMessages = subscribeToIncomingMessages(userId, refreshUnread);
-    const unsubRequests = subscribeToFriendships(userId, refreshRequests);
+    const unsubMessages = subscribeToMessages((_id, _conv, senderId) => {
+      if (senderId !== userId) refreshUnread();
+    });
     return () => {
       active = false;
       unsubMessages();
-      unsubRequests();
     };
   }, [userId]);
 

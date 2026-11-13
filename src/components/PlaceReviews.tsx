@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { StarRating } from '@/components/StarRating';
 import { colors, radius } from '@/constants/theme';
 import { timeAgo } from '@/services/postService';
-import { deleteMyReview, fetchReviews, saveReview, type Review } from '@/services/reviewService';
+import { deleteMyReview, fetchReviews, saveReview, subscribeToReviews, type Review } from '@/services/reviewService';
+import { appAlert } from '@/lib/appAlert';
 
 type Props = {
   placeId: string;
@@ -55,9 +56,30 @@ export function PlaceReviews({ placeId, meId, onStatsChange }: Props) {
     };
   }, [placeId, meId]);
 
+  // Người khác thêm / sửa / xoá đánh giá → danh sách và điểm sao tự cập nhật (không đụng vào ô đang gõ của mình)
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = subscribeToReviews(placeId, () => {
+      fetchReviews(placeId)
+        .then((list) => {
+          if (!active) return;
+          setReviews(list);
+          const st = stats(list);
+          onStatsChange?.(st.avg, st.count);
+        })
+        .catch(() => {});
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+    // onStatsChange đổi mỗi lần render, chỉ cần đăng ký lại khi đổi quán
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeId]);
+
   const save = async () => {
     if (rating < 1) {
-      Alert.alert('Chưa chấm sao', 'Chọn từ 1 đến 5 sao nhé.');
+      appAlert('Chưa chấm sao', 'Chọn từ 1 đến 5 sao nhé.');
       return;
     }
     setSaving(true);
@@ -66,14 +88,14 @@ export function PlaceReviews({ placeId, meId, onStatsChange }: Props) {
       applyList(await fetchReviews(placeId));
       setEditing(false);
     } catch (e: any) {
-      Alert.alert('Không lưu được đánh giá', e?.message ?? String(e));
+      appAlert('Không lưu được đánh giá', e?.message ?? String(e));
     } finally {
       setSaving(false);
     }
   };
 
   const remove = () =>
-    Alert.alert('Xoá đánh giá của bạn?', undefined, [
+    appAlert('Xoá đánh giá của bạn?', undefined, [
       { text: 'Thôi', style: 'cancel' },
       {
         text: 'Xoá',
@@ -86,7 +108,7 @@ export function PlaceReviews({ placeId, meId, onStatsChange }: Props) {
             setComment('');
             setEditing(true);
           } catch (e: any) {
-            Alert.alert('Không xoá được', e?.message ?? String(e));
+            appAlert('Không xoá được', e?.message ?? String(e));
           }
         },
       },
