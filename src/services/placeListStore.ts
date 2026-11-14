@@ -4,7 +4,7 @@ import { requireUserId } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 /**
- * Kho nhỏ giữ danh sách id quán của tôi ("Muốn đi", "Must try"…) để mọi nút bấm cập nhật cùng lúc.
+ * Kho nhỏ giữ danh sách id quán của tôi ("Yêu thích"…) để mọi nút bấm cập nhật cùng lúc.
  * Bảng phải có (user_id, place_id) và chỉ cho chủ đọc/ghi.
  */
 export function createPlaceListStore(opts: { table: string; label: string; sqlFile: string }) {

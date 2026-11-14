@@ -29,6 +29,7 @@ import { WheelCreateDialog } from '@/components/chat/WheelCreateDialog';
 import { WheelMessageCard } from '@/components/chat/WheelMessageCard';
 import { WheelSheet } from '@/components/chat/WheelSheet';
 import { IconButton } from '@/components/IconButton';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { colors, radius, statusBarStyle } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { normalizeName } from '@/services/placeService';
@@ -71,7 +72,7 @@ import {
   type WheelGame,
   type WheelMode,
 } from '@/services/wheelService';
-import { markWished } from '@/services/wishlistService';
+import { markMustTryAdded } from '@/services/mustTryService';
 
 // Bảng emoji: ưu tiên đồ ăn — thức uống — cảm xúc
 const EMOJI_GROUPS: { title: string; emojis: string[] }[] = [
@@ -374,7 +375,7 @@ export default function ChatScreen() {
       // Bấm "Đi" → quán vào "Muốn đi" (server tự thêm) + nhắc trước giờ hẹn; bỏ vote / "Thôi" → huỷ nhắc
       const invite = messages.find((m) => m.id === messageId);
       if (choice === 'go' && current !== 'go') {
-        if (invite?.place_id) markWished(invite.place_id);
+        if (invite?.place_id) markMustTryAdded(invite.place_id);
         if (invite?.invite_at && invite.place && conversationId) {
           scheduleInviteReminder({
             messageId,
@@ -817,6 +818,7 @@ export default function ChatScreen() {
               entries={wheels.entries.filter((e) => e.game_id === game.id)}
               title={messages.find((m) => m.id === wheelOpenMsg)?.body ?? WHEEL_MODES[game.mode].defaultTitle}
               meId={meId}
+              canManage={info?.members.find((m) => m.user_id === meId)?.role === 'admin'}
               people={people}
               onClose={() => setWheelOpenMsg(null)}
               onChanged={() => reloadWheels()}
@@ -824,15 +826,12 @@ export default function ChatScreen() {
           );
         })()}
 
-      {/* Xem ảnh toàn màn hình */}
-      <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
-        <Pressable style={styles.viewer} onPress={() => setViewer(null)}>
-          {viewer && <Image source={{ uri: viewer }} style={styles.viewerImage} contentFit="contain" />}
-          <View style={[styles.viewerClose, { top: insets.top + 12 }]}>
-            <Ionicons name="close" size={26} color="#fff" />
-          </View>
-        </Pressable>
-      </Modal>
+      {/* Xem ảnh toàn màn hình (chụm 2 ngón để zoom) */}
+      <PhotoViewer
+        photos={viewer ? [{ id: viewer, image_url: viewer }] : []}
+        index={viewer ? 0 : null}
+        onClose={() => setViewer(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1144,16 +1143,4 @@ const styles = StyleSheet.create({
   },
   emojiCellPressed: { backgroundColor: colors.accentSoft },
   emojiChar: { fontSize: 28 },
-  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
-  viewerImage: { width: '100%', height: '80%' },
-  viewerClose: {
-    position: 'absolute',
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

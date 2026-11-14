@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
-import { useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { FlatList, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
+import { ZoomableImage } from '@/components/ZoomableImage';
 import { timeAgo } from '@/services/postService';
 
 export type ViewerPhoto = {
@@ -21,10 +22,12 @@ type Props = {
   index: number | null;
   onClose: () => void;
   title?: string;
+  /** Nút / nội dung thêm ở cuối màn hình cho ảnh đang xem (VD: nút xoá ảnh của mình) */
+  footer?: (photo: ViewerPhoto) => ReactNode;
 };
 
-/** Xem ảnh toàn màn hình: vuốt ngang để qua ảnh khác, chụm 2 ngón để phóng to (iOS) */
-export function PhotoViewer({ photos, index, onClose, title }: Props) {
+/** Xem ảnh toàn màn hình: vuốt ngang để qua ảnh khác, chụm 2 ngón (hoặc chạm đúp) để phóng to */
+export function PhotoViewer({ photos, index, onClose, title, footer }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [current, setCurrent] = useState(index ?? 0);
@@ -40,7 +43,8 @@ export function PhotoViewer({ photos, index, onClose, title }: Props) {
 
   return (
     <Modal visible={index != null} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.backdrop}>
+      {/* Android: cử chỉ trong Modal cần GestureHandlerRootView riêng */}
+      <GestureHandlerRootView style={styles.backdrop}>
         <FlatList
           data={photos}
           horizontal
@@ -51,19 +55,9 @@ export function PhotoViewer({ photos, index, onClose, title }: Props) {
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(e) => setCurrent(Math.round(e.nativeEvent.contentOffset.x / width))}
           renderItem={({ item }) => (
-            <ScrollView
-              style={{ width, height }}
-              contentContainerStyle={styles.zoomContent}
-              maximumZoomScale={3}
-              minimumZoomScale={1}
-              centerContent
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-            >
-              <Pressable onPress={onClose} accessible={false}>
-                <Image source={{ uri: item.image_url }} style={{ width, height: height * 0.75 }} contentFit="contain" />
-              </Pressable>
-            </ScrollView>
+            <View style={{ width, height }}>
+              <ZoomableImage uri={item.image_url} contentFit="contain" />
+            </View>
           )}
         />
 
@@ -77,10 +71,10 @@ export function PhotoViewer({ photos, index, onClose, title }: Props) {
           </Pressable>
         </View>
 
-        {photo && (photo.author || photo.caption) && (
-          <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]} pointerEvents="none">
+        {photo && (photo.author || photo.caption || footer) && (
+          <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
             {photo.author && (
-              <View style={styles.authorRow}>
+              <View style={styles.authorRow} pointerEvents="none">
                 <Avatar
                   name={photo.author.display_name}
                   seed={photo.author.username}
@@ -91,17 +85,21 @@ export function PhotoViewer({ photos, index, onClose, title }: Props) {
                 {photo.created_at && <Text style={styles.time}>{timeAgo(photo.created_at)}</Text>}
               </View>
             )}
-            {photo.caption ? <Text style={styles.caption}>{photo.caption}</Text> : null}
+            {photo.caption ? (
+              <Text style={styles.caption} pointerEvents="none">
+                {photo.caption}
+              </Text>
+            ) : null}
+            {footer?.(photo)}
           </View>
         )}
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' },
-  zoomContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   top: {
     position: 'absolute',
     top: 0,

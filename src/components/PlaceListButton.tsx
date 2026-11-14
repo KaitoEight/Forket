@@ -16,7 +16,7 @@ type Props = {
   compact?: boolean;
 };
 
-/** Nút bật / tắt một danh sách quán của tôi ("Muốn đi", "Must try"…) */
+/** Nút bật / tắt một danh sách quán của tôi ("Yêu thích"…) */
 export function PlaceListButton({ placeId, active, toggle, icon, label, tone, compact }: Props) {
   const [busy, setBusy] = useState(false);
 

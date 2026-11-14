@@ -2,6 +2,7 @@ import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { InAppNotifications } from '@/components/InAppNotifications';
 import { colors, isDark } from '@/constants/theme';
@@ -10,7 +11,6 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { openFromPush, registerForPush } from '@/lib/push';
 import { loadCategories } from '@/services/categoryService';
 import { clearMustTry, loadMustTry } from '@/services/mustTryService';
-import { clearWishlist, loadWishlist } from '@/services/wishlistService';
 
 const navTheme = {
   ...DefaultTheme,
@@ -53,15 +53,10 @@ function RootStack() {
     if (userId) registerForPush();
   }, [userId]);
 
-  // Danh sách "Muốn đi" và "Must try" của tài khoản đang dùng (đăng xuất thì xoá khỏi bộ nhớ)
+  // Danh sách quán "Yêu thích" của tài khoản đang dùng (đăng xuất thì xoá khỏi bộ nhớ)
   useEffect(() => {
-    if (userId) {
-      loadWishlist().catch(() => {});
-      loadMustTry().catch(() => {});
-    } else {
-      clearWishlist();
-      clearMustTry();
-    }
+    if (userId) loadMustTry().catch(() => {});
+    else clearMustTry();
   }, [userId]);
 
   if (loading) {
@@ -74,7 +69,7 @@ function RootStack() {
 
   const signedIn = !!session;
   return (
-    <>
+    <GestureHandlerRootView style={styles.root}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -97,7 +92,6 @@ function RootStack() {
           <Stack.Screen name="share-place" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="user/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="wishlist" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="must-try" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="wrapped" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="qr" options={{ animation: 'slide_from_bottom' }} />
@@ -124,7 +118,7 @@ function RootStack() {
       {/* Banner khi có lời mời kết bạn / tin nhắn mới */}
       {session && <InAppNotifications userId={session.user.id} />}
       {session && Platform.OS !== 'web' && <PushTaps />}
-    </>
+    </GestureHandlerRootView>
   );
 }
 
@@ -142,6 +136,7 @@ function PushTaps() {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   splash: {
     flex: 1,
     backgroundColor: colors.bg,

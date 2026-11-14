@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,10 +17,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { IconButton } from '@/components/IconButton';
+import { MustTryButton } from '@/components/MustTryButton';
 import { NotificationBell } from '@/components/NotificationBell';
+import { PhotoViewer } from '@/components/PhotoViewer';
+import { PlaceRow } from '@/components/PlaceRow';
 import { StarRating } from '@/components/StarRating';
 import { colors, radius, statusBarStyle } from '@/constants/theme';
+import { usePlacesByIds } from '@/hooks/usePlacesByIds';
 import { useAuth } from '@/lib/auth';
+import { useMustTryIds } from '@/services/mustTryService';
 import { countIncomingRequests } from '@/services/friendService';
 import { deletePost, timeAgo } from '@/services/postService';
 import {
@@ -33,7 +37,7 @@ import {
 } from '@/services/profileService';
 import { appAlert } from '@/lib/appAlert';
 
-type Section = 'posts' | 'reviews';
+type Section = 'posts' | 'saved' | 'reviews';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -47,7 +51,9 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [section, setSection] = useState<Section>('posts');
-  const [viewer, setViewer] = useState<MyPost | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const savedIds = useMustTryIds();
+  const saved = usePlacesByIds(savedIds);
 
   const load = useCallback(async () => {
     const [p, r, f, q] = await Promise.allSettled([
@@ -83,7 +89,7 @@ export default function ProfileScreen() {
           try {
             await deletePost(post);
             setPosts((prev) => prev.filter((p) => p.id !== post.id));
-            setViewer(null);
+            setViewerIndex(null);
           } catch (e: any) {
             appAlert('Không xoá được', e?.message ?? String(e));
           }
@@ -105,9 +111,12 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.headerActions}>
           <NotificationBell />
-          <IconButton icon="heart-outline" label="Must try" onPress={() => router.push('/must-try')} />
-          <IconButton icon="bookmark-outline" label="Quán muốn đi" onPress={() => router.push('/wishlist')} />
-          <IconButton icon="qr-code-outline" label="Mã QR kết bạn" onPress={() => router.push('/qr')} />
+          <IconButton
+            icon="person-add-outline"
+            label="Thêm bạn"
+            badge={requests}
+            onPress={() => router.push('/friends')}
+          />
           <IconButton icon="settings-outline" label="Cài đặt" onPress={() => router.push('/settings')} />
         </View>
       </View>
@@ -164,28 +173,6 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <View style={styles.actions}>
-          <Pressable
-            style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/camera')}
-          >
-            <Ionicons name="camera" size={18} color={colors.onAccent} />
-            <Text style={styles.primaryText}>Check-in món mới</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/friends')}
-          >
-            <Ionicons name="person-add" size={17} color={colors.onAccent} />
-            <Text style={styles.primaryText}>Thêm bạn</Text>
-            {requests > 0 && (
-              <View style={styles.reqBadge}>
-                <Text style={styles.reqBadgeText}>{requests}</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
-
         <Pressable
           style={({ pressed }) => [styles.wrappedBtn, pressed && styles.pressed]}
           onPress={() => router.push('/wrapped')}
@@ -195,20 +182,11 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </Pressable>
 
-        {/* Chuyển giữa ảnh món ăn và đánh giá */}
+        {/* Chuyển giữa ảnh món ăn, quán đã lưu và đánh giá */}
         <View style={styles.segment}>
-          <SegmentButton
-            icon="grid"
-            label={`Món đã check-in (${posts.length})`}
-            active={section === 'posts'}
-            onPress={() => setSection('posts')}
-          />
-          <SegmentButton
-            icon="star"
-            label={`Đánh giá (${reviews.length})`}
-            active={section === 'reviews'}
-            onPress={() => setSection('reviews')}
-          />
+          <SegmentButton label="Món đã check-in" active={section === 'posts'} onPress={() => setSection('posts')} />
+          <SegmentButton label="Quán đã lưu" active={section === 'saved'} onPress={() => setSection('saved')} />
+          <SegmentButton label="Đánh giá" active={section === 'reviews'} onPress={() => setSection('reviews')} />
         </View>
 
         {loading ? (
@@ -221,11 +199,11 @@ export default function ProfileScreen() {
             />
           ) : (
             <View style={styles.grid}>
-              {posts.map((p) => (
+              {posts.map((p, i) => (
                 <Pressable
                   key={p.id}
                   style={[styles.tile, { width: tile, height: tile * 1.2 }]}
-                  onPress={() => setViewer(p)}
+                  onPress={() => setViewerIndex(i)}
                   onLongPress={() => confirmDelete(p)}
                   delayLongPress={450}
                 >
@@ -240,6 +218,21 @@ export default function ProfileScreen() {
                     {p.place?.name ?? timeAgo(p.created_at)}
                   </Text>
                 </Pressable>
+              ))}
+            </View>
+          )
+        ) : section === 'saved' ? (
+          saved.loading ? (
+            <ActivityIndicator color={colors.accent} style={styles.loader} />
+          ) : saved.rows.length === 0 ? (
+            <Empty
+              emoji="❤️"
+              text="Chưa lưu quán nào. Bấm trái tim trên thẻ quán ở Bản đồ để lưu quán yêu thích. Lắc máy ở tab Bản đồ sẽ chọn giúp bạn hôm nay ăn gì!"
+            />
+          ) : (
+            <View>
+              {saved.rows.map((place) => (
+                <PlaceRow key={place.id} place={place} action={<MustTryButton placeId={place.id} compact />} />
               ))}
             </View>
           )
@@ -263,35 +256,34 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
-        <Pressable style={styles.viewer} onPress={() => setViewer(null)}>
-          {viewer && (
-            <>
-              <Image source={{ uri: viewer.image_url }} style={styles.viewerImage} contentFit="contain" />
-              <Text style={styles.viewerCaption}>
-                {[viewer.place?.name, viewer.caption, timeAgo(viewer.created_at)].filter(Boolean).join(' · ')}
+      <PhotoViewer
+        photos={posts}
+        index={viewerIndex}
+        onClose={() => setViewerIndex(null)}
+        footer={(photo) => {
+          const post = posts.find((x) => x.id === photo.id);
+          if (!post) return null;
+          return (
+            <View style={styles.viewerFooter}>
+              <Text style={styles.viewerCaption} numberOfLines={2}>
+                {[post.place?.name, timeAgo(post.created_at)].filter(Boolean).join(' · ')}
               </Text>
-              <View style={styles.viewerActions}>
-                <Pressable style={styles.viewerBtn} onPress={() => setViewer(null)}>
-                  <Ionicons name="close" size={18} color="#fff" />
-                  <Text style={styles.viewerBtnText}>Đóng</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.viewerBtn, styles.viewerDelete]}
-                  onPress={() => {
-                    const target = viewer;
-                    setViewer(null);
-                    setTimeout(() => confirmDelete(target), 300);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                  <Text style={styles.viewerBtnText}>Xoá ảnh</Text>
-                </Pressable>
-              </View>
-            </>
-          )}
-        </Pressable>
-      </Modal>
+              <Pressable
+                style={styles.viewerDelete}
+                accessibilityLabel="Xoá ảnh"
+                onPress={() => {
+                  // Đóng bảng xem ảnh trước, để hộp xác nhận không bị nằm dưới Modal
+                  setViewerIndex(null);
+                  setTimeout(() => confirmDelete(post), 300);
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Text style={styles.viewerBtnText}>Xoá ảnh</Text>
+              </Pressable>
+            </View>
+          );
+        }}
+      />
     </View>
   );
 }
@@ -305,21 +297,15 @@ function Stat({ value, label, onPress }: { value: number; label: string; onPress
   );
 }
 
-function SegmentButton({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+function SegmentButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable style={[styles.segmentBtn, active && styles.segmentBtnActive]} onPress={onPress}>
-      <Ionicons name={icon} size={15} color={active ? colors.accent : colors.textMuted} />
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
+      <Text
+        style={[styles.segmentText, active && styles.segmentTextActive]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
         {label}
       </Text>
     </Pressable>
@@ -397,39 +383,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tasteText: { color: colors.brown, fontSize: 12, fontWeight: '700' },
-  actions: { flexDirection: 'row', gap: 10 },
-  primaryBtn: {
-    flex: 1.4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.accent,
-    height: 50,
-    borderRadius: 16,
-  },
-  secondaryBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.brown,
-    height: 50,
-    borderRadius: 16,
-  },
-  primaryText: { color: colors.onAccent, fontWeight: '800', fontSize: 15 },
   pressed: { opacity: 0.85 },
-  reqBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    backgroundColor: colors.caramel,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reqBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   wrappedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -448,14 +402,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    paddingHorizontal: 4,
     paddingVertical: 12,
     borderBottomWidth: 3,
     borderBottomColor: 'transparent',
     marginBottom: -1,
   },
   segmentBtnActive: { borderBottomColor: colors.accent },
-  segmentText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
+  segmentText: { color: colors.textMuted, fontWeight: '700', fontSize: 13, textAlign: 'center' },
   segmentTextActive: { color: colors.accent },
   loader: { marginTop: 24 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -485,25 +439,16 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', gap: 8, paddingVertical: 32 },
   emptyEmoji: { fontSize: 44 },
   emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  viewer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  viewerImage: { width: '100%', height: '70%' },
-  viewerActions: { flexDirection: 'row', gap: 12 },
-  viewerBtn: {
+  viewerFooter: { gap: 10, alignItems: 'flex-start' },
+  viewerCaption: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  viewerDelete: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 18,
     height: 44,
     borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: colors.danger,
   },
-  viewerDelete: { backgroundColor: colors.danger },
   viewerBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  viewerCaption: { color: '#fff', fontSize: 15, fontWeight: '700', paddingHorizontal: 24, textAlign: 'center' },
 });

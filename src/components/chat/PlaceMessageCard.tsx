@@ -2,7 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { tagLabel } from '@/constants/placeTags';
@@ -10,7 +11,6 @@ import { colors, radius } from '@/constants/theme';
 import type { ChatPlace, Vote } from '@/services/chatService';
 import { fetchPlacesByIds, type MapPlace } from '@/services/placeService';
 import { toggleMustTry, useMustTryIds } from '@/services/mustTryService';
-import { toggleWishlist, useWishlistIds } from '@/services/wishlistService';
 
 type Person = { id: string; username: string; display_name: string; avatar_url: string | null };
 
@@ -64,7 +64,7 @@ type Props = {
 /** Card quán trong chat. kind = 'invite' → thêm phần vote "Đi" / "Thôi" */
 export function PlaceMessageCard({ kind, place, note, inviteAt, mine, meId, votes, people, onVote }: Props) {
   const [stats, setStats] = useState<MapPlace | null>(() => (place ? (statsCache.get(place.id) ?? null) : null));
-  const wished = useWishlistIds().has(place?.id ?? '');
+  const [votersOpen, setVotersOpen] = useState(false);
   const mustTry = useMustTryIds().has(place?.id ?? '');
 
   useEffect(() => {
@@ -139,30 +139,21 @@ export function PlaceMessageCard({ kind, place, note, inviteAt, mine, meId, vote
       </View>
 
       <View style={styles.links}>
-        <Pressable style={styles.link} onPress={openMap}>
-          <Ionicons name="map-outline" size={15} color={colors.accent} />
-          <Text style={styles.linkText}>Xem bản đồ</Text>
+        <Pressable style={styles.link} onPress={openMap} accessibilityLabel="Xem trên bản đồ" hitSlop={4}>
+          <Ionicons name="map-outline" size={21} color={colors.accent} />
         </Pressable>
         <View style={styles.linkDivider} />
-        <Pressable style={styles.link} onPress={directions}>
-          <Ionicons name="navigate-outline" size={15} color={colors.accent} />
-          <Text style={styles.linkText}>Chỉ đường</Text>
-        </Pressable>
-        <View style={styles.linkDivider} />
-        <Pressable
-          style={styles.link}
-          onPress={() => toggleWishlist(place.id).catch(() => {})}
-          accessibilityLabel={wished ? 'Bỏ khỏi Muốn đi' : 'Thêm vào Muốn đi'}
-        >
-          <Ionicons name={wished ? 'bookmark' : 'bookmark-outline'} size={15} color={colors.caramel} />
+        <Pressable style={styles.link} onPress={directions} accessibilityLabel="Chỉ đường" hitSlop={4}>
+          <Ionicons name="navigate-outline" size={21} color={colors.accent} />
         </Pressable>
         <View style={styles.linkDivider} />
         <Pressable
           style={styles.link}
           onPress={() => toggleMustTry(place.id).catch(() => {})}
-          accessibilityLabel={mustTry ? 'Bỏ khỏi Must try' : 'Thêm vào Must try'}
+          accessibilityLabel={mustTry ? 'Bỏ khỏi Yêu thích' : 'Thêm vào Yêu thích'}
+          hitSlop={4}
         >
-          <Ionicons name={mustTry ? 'heart' : 'heart-outline'} size={15} color={colors.danger} />
+          <Ionicons name={mustTry ? 'heart' : 'heart-outline'} size={21} color={colors.danger} />
         </Pressable>
       </View>
 
@@ -172,9 +163,15 @@ export function PlaceMessageCard({ kind, place, note, inviteAt, mine, meId, vote
             <VoteButton label="Đi" count={goers.length} active={myVote === 'go'} onPress={() => onVote?.('go')} />
             <VoteButton label="Thôi" count={nopes.length} active={myVote === 'no'} onPress={() => onVote?.('no')} muted />
           </View>
-          {goers.length > 0 && <Voters label="Đi" votes={goers} people={people} meId={meId} />}
-          {nopes.length > 0 && <Voters label="Thôi" votes={nopes} people={people} meId={meId} />}
+          {goers.length > 0 && <Voters label="Đi" votes={goers} people={people} meId={meId} onOpen={() => setVotersOpen(true)} />}
+          {nopes.length > 0 && (
+            <Voters label="Thôi" votes={nopes} people={people} meId={meId} onOpen={() => setVotersOpen(true)} />
+          )}
         </View>
+      )}
+
+      {votersOpen && (
+        <VotersSheet goers={goers} nopes={nopes} people={people} meId={meId} onClose={() => setVotersOpen(false)} />
       )}
     </View>
   );
@@ -211,34 +208,124 @@ function VoteButton({
   );
 }
 
+const MAX_AVATARS = 3;
+
+function nameOf(v: Vote, people: Map<string, Person>, meId: string | undefined) {
+  return v.user_id === meId ? 'Bạn' : (people.get(v.user_id)?.display_name ?? 'Ai đó');
+}
+
+/** Một dòng "Đi: An, Bình và 3 người khác" + avatar xếp chồng bên phải. Bấm → xem danh sách đầy đủ. */
 function Voters({
   label,
   votes,
   people,
   meId,
+  onOpen,
 }: {
   label: string;
   votes: Vote[];
   people: Map<string, Person>;
   meId: string | undefined;
+  onOpen: () => void;
 }) {
-  const names = votes
-    .map((v) => (v.user_id === meId ? 'Bạn' : people.get(v.user_id)?.display_name))
-    .filter(Boolean)
-    .join(', ');
+  // Mình luôn đứng đầu danh sách
+  const sorted = [...votes].sort((a, b) => Number(b.user_id === meId) - Number(a.user_id === meId));
+  const shown = sorted.slice(0, 2).map((v) => nameOf(v, people, meId));
+  const names = sorted.length > 2 ? `${shown.join(', ')} và ${sorted.length - 2} người khác` : shown.join(' và ');
+  const extra = sorted.length - MAX_AVATARS;
+
   return (
-    <View style={styles.voters}>
-      <Text style={styles.votersLabel}>{label}:</Text>
-      <View style={styles.avatars}>
-        {votes.slice(0, 5).map((v) => {
-          const p = people.get(v.user_id);
-          return p ? <Avatar key={v.user_id} name={p.display_name} seed={p.username} uri={p.avatar_url} size={20} /> : null;
-        })}
-      </View>
+    <Pressable
+      style={({ pressed }) => [styles.voters, pressed && styles.pressed]}
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${sorted.length} người chọn ${label}. Bấm để xem danh sách`}
+    >
+      <Text style={styles.votersLabel}>
+        {label} · {sorted.length}
+      </Text>
       <Text style={styles.votersNames} numberOfLines={1}>
         {names}
       </Text>
-    </View>
+      <View style={styles.avatars}>
+        {sorted.slice(0, MAX_AVATARS).map((v, i) => {
+          const p = people.get(v.user_id);
+          return (
+            <View key={v.user_id} style={[styles.avatarSlot, i > 0 && styles.avatarOverlap]}>
+              {p ? (
+                <Avatar name={p.display_name} seed={p.username} uri={p.avatar_url} size={22} />
+              ) : (
+                <View style={styles.avatarGhost} />
+              )}
+            </View>
+          );
+        })}
+        {extra > 0 && (
+          <View style={[styles.avatarSlot, styles.avatarOverlap, styles.avatarMore]}>
+            <Text style={styles.avatarMoreText}>+{extra}</Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+/** Danh sách đầy đủ người chọn Đi / Thôi */
+function VotersSheet({
+  goers,
+  nopes,
+  people,
+  meId,
+  onClose,
+}: {
+  goers: Vote[];
+  nopes: Vote[];
+  people: Map<string, Person>;
+  meId: string | undefined;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const groups = [
+    { title: 'Đi', list: goers },
+    { title: 'Thôi', list: nopes },
+  ].filter((g) => g.list.length > 0);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetBackdrop}>
+        <Pressable style={styles.sheetFlex} onPress={onClose} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.sheetHandle} />
+          <ScrollView contentContainerStyle={styles.sheetBody} showsVerticalScrollIndicator={false}>
+            {groups.map((g) => (
+              <View key={g.title} style={styles.sheetGroup}>
+                <Text style={styles.sheetTitle}>
+                  {g.title} · {g.list.length} người
+                </Text>
+                {g.list.map((v) => {
+                  const person = people.get(v.user_id);
+                  return (
+                    <View key={v.user_id} style={styles.sheetRow}>
+                      {person ? (
+                        <Avatar name={person.display_name} seed={person.username} uri={person.avatar_url} size={36} />
+                      ) : (
+                        <View style={styles.sheetGhost} />
+                      )}
+                      <Text style={styles.sheetName} numberOfLines={1}>
+                        {nameOf(v, people, meId)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
+          <Pressable style={styles.sheetClose} onPress={onClose}>
+            <Text style={styles.sheetCloseText}>Đóng</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -289,9 +376,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  link: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10 },
+  link: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 11 },
   linkDivider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  linkText: { color: colors.accent, fontWeight: '700', fontSize: 13 },
   vote: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -314,8 +400,50 @@ const styles = StyleSheet.create({
   voteText: { color: colors.text, fontWeight: '800', fontSize: 14 },
   voteTextActive: { color: colors.onAccent },
   pressed: { opacity: 0.8 },
-  voters: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  votersLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
-  avatars: { flexDirection: 'row', gap: 2 },
+  voters: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
+  votersLabel: { color: colors.text, fontSize: 12, fontWeight: '800' },
   votersNames: { flex: 1, color: colors.textMuted, fontSize: 12 },
+  avatars: { flexDirection: 'row', alignItems: 'center' },
+  avatarSlot: { borderRadius: 12, borderWidth: 2, borderColor: colors.surface, overflow: 'hidden' },
+  avatarOverlap: { marginLeft: -8 },
+  avatarGhost: { width: 22, height: 22, backgroundColor: colors.surfaceHigh },
+  avatarMore: {
+    width: 26,
+    height: 26,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarMoreText: { color: colors.accent, fontSize: 10, fontWeight: '800' },
+  sheetBackdrop: { flex: 1, backgroundColor: colors.overlay },
+  sheetFlex: { flex: 1 },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    maxHeight: '70%',
+    gap: 8,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  sheetHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  sheetBody: { gap: 16, paddingVertical: 8 },
+  sheetGroup: { gap: 8 },
+  sheetTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sheetGhost: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceHigh },
+  sheetName: { flex: 1, color: colors.text, fontWeight: '700', fontSize: 15 },
+  sheetClose: {
+    height: 48,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCloseText: { color: colors.text, fontWeight: '800', fontSize: 15 },
 });

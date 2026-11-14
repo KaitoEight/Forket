@@ -11,18 +11,17 @@ Dự án làm cho vui, viết bằng **Expo (React Native)** và dùng **Supabas
   - Tìm quán theo tên trên toàn bộ dữ liệu (không cần gõ dấu). Bấm vào ô tìm kiếm sẽ thấy quán *đã đi gần đây* và *đi nhiều nhất*.
   - Lọc theo Đồ ăn / Đồ uống và từng loại (cà phê, bún/phở…), theo ảnh, theo điểm, và theo **quán bạn bè đã đi**.
   - Bấm ảnh trên thẻ quán để xem toàn màn hình. Người ghim quán sửa được tên/địa chỉ/loại, xoá quán khi chưa ai khác dùng, hoặc bỏ quyền quản lý.
-- **Bảng tin**: ảnh của bạn và bạn bè, cập nhật theo realtime. Bạn có thể thả cảm xúc, trả lời ảnh, và xoá ảnh của mình.
+- **Bảng tin**: ảnh của bạn và bạn bè, cập nhật theo realtime. Bạn có thể thả cảm xúc, trả lời ảnh (gửi thẳng vào chat), chụm 2 ngón / chạm đúp để zoom ảnh, và xoá ảnh của mình.
 - **Bạn bè**: kết bạn bằng `@username` hoặc **mã QR** (`forket://add/<mã>`), chặn người dùng.
-- **Hồ sơ**: ảnh đại diện, bio, quán đã đi. Xem hồ sơ bạn bè và lịch sử quán của họ.
+- **Hồ sơ**: ảnh đại diện, bio, 3 tab **Món đã check-in** / **Quán đã lưu** (quán yêu thích) / **Đánh giá**. Thanh trên chỉ có thông báo, thêm bạn và cài đặt. Xem hồ sơ bạn bè và lịch sử quán của họ.
 - **Chat**: chat 1-1 và **chat nhóm** (thành viên nào cũng thêm được bạn bè của mình), gửi ảnh, emoji, gửi **card quán** hoặc **lời rủ đi ăn** kèm vote Đi / Thôi.
 - **Cài đặt & quyền riêng tư**: sửa hồ sơ, đổi mật khẩu, chế độ riêng tư (bạn bè không thấy ảnh, quán đã đi và đánh giá), chỉ cho tìm qua QR, danh sách chặn, xoá tài khoản.
-- **Thông báo**: chuông thông báo trong app (kết bạn, cảm xúc, bình luận, nhắc tên `@bạn` / `@all` trong nhóm, bảng tính tiền) và **thông báo đẩy** khi app đóng (cần development build + `eas init`, xem bên dưới).
-- **Muốn đi**: lưu quán để đi sau (nút trên thẻ quán, card quán trong chat), lọc trên bản đồ; bấm "Đi" ở lời rủ cũng tự lưu quán. Lời rủ có thể kèm **giờ hẹn** và nhắc trước 30 phút.
-- **Bình luận ảnh** trên Bảng tin; ghi **món + giá** lúc check-in (thẻ quán hiện "Món nên thử"); quán có **giờ mở cửa** và **mức giá**.
-- **Tổng kết năm** (Forket Wrapped) trong Hồ sơ, chia sẻ quán ra ngoài app (Zalo, Messenger…), báo cáo người dùng / ảnh / bình luận, giới hạn spam lời mời kết bạn.
-- **Must try ❤️**: danh sách quán nhất định phải thử (tách khỏi "Muốn đi", riêng tư — chỉ mình xem). Nút tim trên thẻ quán và card quán trong chat; xem lại ở Hồ sơ.
-- **Hôm nay ăn gì?**: **lắc máy** ở tab Bản đồ (hoặc bấm chip "Hôm nay ăn gì?") để random một quán trong bán kính 1 / 3 / 5km quanh bạn, trong Must try của bạn, và / hoặc trong Must try của một hay nhiều nhóm chat (chọn nhiều nguồn cùng lúc). Cần đã chạy `20261115000000_must_try.sql`.
-- **Minigame vòng quay trong chat** (menu "+" → "Minigame vòng quay"): **Ai trả tiền?**, **Chọn món — loại dần** (mỗi lần quay loại 1 món, món cuối thắng), **Chọn món — quay 1 lần**. Server chọn kết quả (không ai quay lại được), mọi máy cùng chạy animation theo realtime. Cần đã chạy `20261115010000_wheel_games.sql`.
+- **Thông báo**: chuông thông báo trong app (kết bạn, cảm xúc, nhắc tên `@bạn` / `@all` trong nhóm, bảng tính tiền) và **thông báo đẩy** khi app đóng (cần development build + `eas init`, xem bên dưới).
+- Lời rủ đi ăn có thể kèm **giờ hẹn** và nhắc trước 30 phút. Ghi **món + giá** lúc check-in (thẻ quán hiện "Món nên thử"); quán có **giờ mở cửa** và **mức giá**.
+- **Tổng kết năm** (Forket Wrapped) trong Hồ sơ, chia sẻ quán ra ngoài app (Zalo, Messenger…), báo cáo người dùng / ảnh, giới hạn spam lời mời kết bạn.
+- **Yêu thích ❤️** (một danh sách duy nhất, riêng tư — chỉ mình xem): nút tim trên thẻ quán và card quán trong chat, chip lọc "Yêu thích" trên bản đồ, xem ở tab "Quán đã lưu" trong Hồ sơ. Bấm "Đi" ở lời rủ cũng tự thêm quán vào đây. Cần đã chạy `20261115000000_must_try.sql`, rồi `20261116000000_merge_wishlist_into_favorites.sql` (chép "Muốn đi" cũ sang).
+- **Hôm nay ăn gì?**: **lắc máy** ở tab Bản đồ (hoặc bấm chip "Hôm nay ăn gì?") để random một quán trong bán kính 1 / 3 / 5km quanh bạn, trong Yêu thích của bạn, và / hoặc trong Yêu thích của một hay nhiều nhóm chat (chọn nhiều nguồn cùng lúc). Cần đã chạy `20261115000000_must_try.sql`.
+- **Minigame vòng quay trong chat** (menu "+" → "Minigame vòng quay"): **Chọn người** (vd: ai trả tiền), **Chọn món — loại dần** (mỗi lần quay loại 1 món, món cuối được chọn), **Chọn món — quay 1 lần**. Mỗi người thêm tối đa 5 món (chặn trùng), trưởng nhóm hoặc người tạo xoá được món của mọi người (cần `20261116010000_wheel_multi_entries.sql`). Server chọn kết quả (không ai quay lại được), mọi máy cùng chạy animation theo realtime. Cần đã chạy `20261115010000_wheel_games.sql`.
 - **Chế độ tối** theo giao diện của máy (đọc lúc mở app; web luôn dùng nền sáng).
 - **Màn chào**: người mới xem 3 slide giới thiệu; người vừa đăng xuất thấy màn "Chào lại" chỉ cần nhập mật khẩu.
 

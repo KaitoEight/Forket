@@ -1,8 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -20,10 +19,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
-import { CommentsSheet } from '@/components/CommentsSheet';
 import { IconButton } from '@/components/IconButton';
 import { NotificationBell } from '@/components/NotificationBell';
-import { PinchZoom } from '@/components/PinchZoom';
+import { ZoomableImage } from '@/components/ZoomableImage';
 import { colors, radius, statusBarStyle } from '@/constants/theme';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { useAuth } from '@/lib/auth';
@@ -48,7 +46,6 @@ import {
 import { appAlert } from '@/lib/appAlert';
 import { formatMoney } from '@/lib/money';
 import { askReport } from '@/lib/report';
-import { fetchCommentCounts, subscribeToComments } from '@/services/commentService';
 
 type Burst = { id: number; emoji: string };
 
@@ -72,8 +69,6 @@ export default function HistoryScreen() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [commentCounts, setCommentCounts] = useState<Map<string, number>>(new Map());
-  const [commentsFor, setCommentsFor] = useState<Post | null>(null);
 
   const listRef = useRef<FlatList<Post>>(null);
   const pageIndex = useRef(0);
@@ -139,35 +134,6 @@ export default function HistoryScreen() {
       appState.remove();
     };
   }, []);
-
-  // Số bình luận dưới mỗi ảnh (tải khi danh sách ảnh đổi; cập nhật ngay khi có bình luận mới)
-  const postIdsKey = posts.map((p) => p.id).join(',');
-  useEffect(() => {
-    if (!postIdsKey) return;
-    let active = true;
-    const ids = postIdsKey.split(',');
-    const load = () =>
-      fetchCommentCounts(ids).then((counts) => {
-        if (active) setCommentCounts(counts);
-      });
-    load();
-    const unsubscribe = subscribeToComments(() => load());
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [postIdsKey]);
-
-  const setCommentCount = useCallback(
-    (postId: string, count: number) =>
-      setCommentCounts((prev) => {
-        if (prev.get(postId) === count) return prev;
-        const next = new Map(prev);
-        next.set(postId, count);
-        return next;
-      }),
-    []
-  );
 
   useEffect(() => {
     if (!toast) return;
@@ -301,9 +267,7 @@ export default function HistoryScreen() {
             size={size}
             height={pageHeight}
             meId={meId}
-            commentCount={commentCounts.get(item.id) ?? 0}
             onPressReactions={() => showActivity(item)}
-            onOpenComments={() => setCommentsFor(item)}
             onDelete={() => removePost(item)}
           />
         )}
@@ -356,16 +320,6 @@ export default function HistoryScreen() {
         )}
       </View>
 
-      {commentsFor && (
-        <CommentsSheet
-          postId={commentsFor.id}
-          postOwnerId={commentsFor.author?.id}
-          meId={meId}
-          onClose={() => setCommentsFor(null)}
-          onCountChange={setCommentCount}
-        />
-      )}
-
       {/* Chừa chỗ cho thanh dưới (thanh dưới nổi lên khi mở bàn phím, danh sách ảnh giữ nguyên) */}
       <View style={{ height: footerHeight }} />
 
@@ -401,18 +355,14 @@ function PostPage({
   size,
   height,
   meId,
-  commentCount,
   onPressReactions,
-  onOpenComments,
   onDelete,
 }: {
   post: Post;
   size: number;
   height: number;
   meId: string | undefined;
-  commentCount: number;
   onPressReactions: () => void;
-  onOpenComments: () => void;
   onDelete: () => void;
 }) {
   const isMine = post.author?.id === meId;
@@ -429,15 +379,8 @@ function PostPage({
       accessible={false}
     >
       <View style={[styles.photo, { width: size, height: size }]}>
-        {/* Chụm 2 ngón để zoom ảnh */}
-        <PinchZoom>
-          <Image
-            source={{ uri: post.image_url }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={200}
-          />
-        </PinchZoom>
+        {/* Chụm 2 ngón (hoặc chạm đúp) để zoom ảnh */}
+        <ZoomableImage uri={post.image_url} contentFit="cover" transition={200} />
         {post.caption ? (
           <View style={styles.captionPill}>
             <Text style={styles.captionText}>{post.caption}</Text>
@@ -491,67 +434,59 @@ function PostPage({
       </View>
 
       <View style={styles.meta}>
-        <Pressable
-          style={styles.authorLink}
-          disabled={!post.author || isMine}
-          onPress={() => post.author && router.push({ pathname: '/user/[id]', params: { id: post.author.id } })}
-        >
-          {post.author && (
-            <Avatar
-              name={post.author.display_name}
-              seed={post.author.username}
-              uri={post.author.avatar_url}
-              size={24}
-            />
-          )}
-          <Text style={styles.author} numberOfLines={1}>
-            {authorName}
-          </Text>
-        </Pressable>
-        <Text style={styles.dot}>·</Text>
-        {post.place ? (
-          <>
-            <Pressable
-              style={styles.placeLink}
-              hitSlop={6}
-              accessibilityRole="link"
-              accessibilityLabel={`Xem ${post.place.name} trên bản đồ`}
-              onPress={() => {
-                const placeId = post.place?.id;
-                if (placeId) router.navigate({ pathname: '/', params: { focusPlace: placeId } });
-              }}
-            >
-              <Ionicons name="location" size={14} color={colors.accent} />
-              <Text style={styles.placeName} numberOfLines={1}>
-                {post.place.name}
-              </Text>
-            </Pressable>
-            <Text style={styles.dot}>·</Text>
-          </>
-        ) : null}
+        <View style={styles.metaTop}>
+          <Pressable
+            style={styles.authorLink}
+            disabled={!post.author || isMine}
+            onPress={() => post.author && router.push({ pathname: '/user/[id]', params: { id: post.author.id } })}
+          >
+            {post.author && (
+              <Avatar
+                name={post.author.display_name}
+                seed={post.author.username}
+                uri={post.author.avatar_url}
+                size={24}
+              />
+            )}
+            <Text style={styles.author} numberOfLines={1}>
+              {authorName}
+            </Text>
+          </Pressable>
+          {post.place ? (
+            <>
+              <Text style={styles.dot}>·</Text>
+              <Pressable
+                style={styles.placeLink}
+                hitSlop={6}
+                accessibilityRole="link"
+                accessibilityLabel={`Xem ${post.place.name} trên bản đồ`}
+                onPress={() => {
+                  const placeId = post.place?.id;
+                  if (placeId) router.navigate({ pathname: '/', params: { focusPlace: placeId } });
+                }}
+              >
+                <Ionicons name="location" size={14} color={colors.accent} />
+                <Text style={styles.placeName} numberOfLines={1}>
+                  {post.place.name}
+                </Text>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+        {/* Thời gian đăng nằm dòng dưới, thẳng hàng với tên */}
         <Text style={styles.time}>{timeAgo(post.created_at)}</Text>
       </View>
 
-      <View style={styles.extras}>
-        {post.dish ? (
+      {post.dish ? (
+        <View style={styles.extras}>
           <View style={styles.dishChip}>
             <Text style={styles.dishText} numberOfLines={1}>
               🍽️ {post.dish}
               {post.price ? ` · ${formatMoney(post.price)}` : ''}
             </Text>
           </View>
-        ) : (
-          <View style={styles.flex} />
-        )}
-        <Pressable
-          style={({ pressed }) => [styles.commentBtn, pressed && styles.dim]}
-          onPress={onOpenComments}
-          accessibilityLabel={`Bình luận${commentCount ? `, ${commentCount} bình luận` : ''}`}
-        >
-          <Ionicons name="chatbubble-outline" size={18} color={colors.accent} />
-          <Text style={styles.commentText}>{commentCount > 0 ? commentCount : 'Bình luận'}</Text>
-        </Pressable>
-      </View>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -751,13 +686,14 @@ const styles = StyleSheet.create({
   },
   reactionChipText: { color: colors.onPhoto, fontWeight: '800', fontSize: 14 },
   authorLink: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24 },
+  meta: { alignSelf: 'stretch', paddingHorizontal: 24, gap: 2 },
+  metaTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   author: { color: colors.text, fontWeight: '800', fontSize: 15, flexShrink: 0, maxWidth: 140 },
   placeLink: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
   placeName: { color: colors.accent, fontWeight: '700', fontSize: 15, flexShrink: 1, textDecorationLine: 'underline' },
   dot: { color: colors.textMuted },
-  time: { color: colors.textMuted, fontSize: 15 },
-  extras: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, marginTop: 8 },
+  time: { color: colors.textMuted, fontSize: 13, marginLeft: 30 },
+  extras: { alignSelf: 'stretch', flexDirection: 'row', paddingHorizontal: 24, marginTop: 4 },
   dishChip: {
     flexShrink: 1,
     backgroundColor: colors.caramelSoft,
@@ -766,17 +702,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   dishText: { color: colors.brown, fontWeight: '700', fontSize: 14 },
-  commentBtn: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
-  },
-  commentText: { color: colors.accent, fontWeight: '800', fontSize: 14 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   emptyEmoji: { fontSize: 48 },
   emptyText: { color: colors.textMuted, fontSize: 15, textAlign: 'center' },

@@ -19,13 +19,17 @@ import { Wheel } from '@/components/chat/Wheel';
 import { colors, radius } from '@/constants/theme';
 import {
   WHEEL_MODES,
-  removeWheelEntry,
-  setWheelEntry,
+  addWheelEntry,
+  deleteWheelEntry,
   spinWheel,
   startWheel,
+  wheelLabelKey,
   type WheelEntry,
   type WheelGame,
 } from '@/services/wheelService';
+
+/** Mỗi người thêm tối đa chừng này món (server cũng chặn) */
+const MAX_PER_PERSON = 5;
 
 /** Thời gian vòng quay chạy; server chặn quay chồng lên nhau trong 5 giây */
 const SPIN_MS = 4000;
@@ -52,6 +56,8 @@ type Props = {
   entries: WheelEntry[];
   title: string;
   meId: string | undefined;
+  /** Là trưởng nhóm → xoá được món của mọi người */
+  canManage: boolean;
   people: Map<string, Person>;
   onClose: () => void;
   /** Tải lại dữ liệu vòng quay sau khi mình thay đổi */
@@ -59,15 +65,15 @@ type Props = {
 };
 
 /** Vòng quay toàn màn hình: gom món, bắt đầu, quay, xem kết quả. Mọi máy cùng chạy animation theo kết quả của server. */
-export function WheelSheet({ game, entries, title, meId, people, onClose, onChanged }: Props) {
+export function WheelSheet({ game, entries, title, meId, canManage, people, onClose, onChanged }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const size = Math.min(width - 48, 300);
   const mode = WHEEL_MODES[game.mode];
   const isFood = game.mode !== 'pay';
 
-  const mine = entries.find((e) => e.user_id === meId);
-  const [dish, setDish] = useState(mine?.label ?? '');
+  const myCount = entries.filter((e) => e.user_id === meId).length;
+  const [dish, setDish] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,12 +133,27 @@ export function WheelSheet({ game, entries, title, meId, people, onClose, onChan
     }
   };
 
-  const saveDish = () => run(() => setWheelEntry(game.id, dish));
-  const dropDish = () =>
-    run(async () => {
-      await removeWheelEntry(game.id);
+  const addDish = async () => {
+    const label = dish.trim();
+    if (!label || busy) return;
+    // Báo trùng ngay trên máy (bỏ dấu, hoa thường); server vẫn kiểm lại
+    if (entries.some((e) => wheelLabelKey(e.label) === wheelLabelKey(label))) {
+      setError(`Món “${label}” đã có trong vòng quay rồi.`);
+      return;
+    }
+    if (myCount >= MAX_PER_PERSON) {
+      setError(`Mỗi người thêm tối đa ${MAX_PER_PERSON} món.`);
+      return;
+    }
+    await run(async () => {
+      await addWheelEntry(game.id, label);
       setDish('');
     });
+  };
+
+  const canDelete = (e: WheelEntry) =>
+    game.status === 'collecting' && (e.user_id === meId || canManage || isCreator);
+  const dropEntry = (e: WheelEntry) => run(() => deleteWheelEntry(e.id));
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -161,7 +182,7 @@ export function WheelSheet({ game, entries, title, meId, people, onClose, onChan
               <View style={styles.result}>
                 <Text style={styles.resultEmoji}>{isFood ? '🍽️' : '🎉'}</Text>
                 <Text style={styles.resultText}>
-                  {isFood ? `Hôm nay ăn: ${winner.label}` : `${winner.label} trả tiền!`}
+                  {isFood ? `Món được chọn: ${winner.label}` : `${winner.label} là người được chọn!`}
                 </Text>
                 {isFood && !!winner.user_id && (
                   <Text style={styles.resultSub}>món của {winner.user_id === meId ? 'bạn' : (people.get(winner.user_id)?.display_name ?? 'một người bạn')}</Text>
@@ -178,31 +199,32 @@ export function WheelSheet({ game, entries, title, meId, people, onClose, onChan
             {/* Gom món */}
             {isFood && game.status === 'collecting' && (
               <View style={styles.section}>
-                <Text style={styles.label}>{mine ? 'Món của bạn' : 'Thêm món của bạn'}</Text>
+                <Text style={styles.label}>
+                  Thêm món ({myCount}/{MAX_PER_PERSON} món của bạn)
+                </Text>
                 <View style={styles.inputRow}>
                   <TextInput
                     style={styles.input}
                     value={dish}
-                    onChangeText={setDish}
+                    onChangeText={(t) => {
+                      setDish(t);
+                      setError(null);
+                    }}
                     placeholder="vd: Bún bò Huế"
                     placeholderTextColor={colors.textMuted}
                     maxLength={40}
                     returnKeyType="done"
-                    onSubmitEditing={saveDish}
+                    blurOnSubmit={false}
+                    onSubmitEditing={addDish}
                   />
                   <Pressable
-                    style={[styles.addBtn, (!dish.trim() || dish.trim() === mine?.label) && styles.dim]}
-                    onPress={saveDish}
-                    disabled={busy || !dish.trim() || dish.trim() === mine?.label}
+                    style={[styles.addBtn, (!dish.trim() || busy) && styles.dim]}
+                    onPress={addDish}
+                    disabled={busy || !dish.trim()}
                   >
-                    <Text style={styles.addText}>{mine ? 'Đổi' : 'Thêm'}</Text>
+                    <Text style={styles.addText}>Thêm</Text>
                   </Pressable>
                 </View>
-                {!!mine && (
-                  <Pressable onPress={dropDish} disabled={busy} hitSlop={8}>
-                    <Text style={styles.linkDanger}>Rút món của mình</Text>
-                  </Pressable>
-                )}
               </View>
             )}
 
@@ -216,10 +238,20 @@ export function WheelSheet({ game, entries, title, meId, people, onClose, onChan
                     const by = isFood && e.user_id ? (e.user_id === meId ? 'bạn' : people.get(e.user_id)?.display_name) : null;
                     return (
                       <View key={e.id} style={[styles.chip, out && styles.chipOut, e.id === game.winner_entry && styles.chipWin]}>
-                        <Text style={[styles.chipText, out && styles.chipTextOut]} numberOfLines={1}>
+                        <Text style={[styles.chipText, out && styles.chipTextOut, styles.chipLabel]} numberOfLines={1}>
                           {e.label}
                           {by ? ` · ${by}` : ''}
                         </Text>
+                        {canDelete(e) && (
+                          <Pressable
+                            onPress={() => dropEntry(e)}
+                            disabled={busy}
+                            hitSlop={8}
+                            accessibilityLabel={`Xoá ${e.label}`}
+                          >
+                            <Ionicons name="close-circle" size={17} color={colors.textMuted} />
+                          </Pressable>
+                        )}
                       </View>
                     );
                   })}
@@ -334,9 +366,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addText: { color: colors.onAccent, fontWeight: '800', fontSize: 15 },
-  linkDanger: { color: colors.danger, fontWeight: '700', fontSize: 13 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chipLabel: { flexShrink: 1 },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     maxWidth: '100%',
     backgroundColor: colors.surface,
     borderWidth: 1,

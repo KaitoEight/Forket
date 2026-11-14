@@ -64,7 +64,7 @@ async function buildPool(src: Sources): Promise<Candidate[]> {
     }
   }
 
-  // Must try của tôi + của từng nhóm → tải thông tin quán một lần
+  // Yêu thích của tôi + của từng nhóm → tải thông tin quán một lần
   const groupHits: { group: Group; placeId: string; count: number }[] = [];
   if (src.groups.length > 0) {
     const results = await Promise.all(src.groups.map((g) => fetchGroupMustTry(g.id)));
@@ -84,7 +84,7 @@ async function buildPool(src: Sources): Promise<Candidate[]> {
   if (src.mine) {
     for (const id of src.mineIds) {
       const p = loaded.get(id);
-      if (p) add(p, '❤️ Must try của bạn');
+      if (p) add(p, '❤️ Yêu thích của bạn');
     }
   }
   for (const h of groupHits) {
@@ -104,7 +104,7 @@ type Props = {
   onInvite: (place: MapPlace) => void;
 };
 
-/** "Hôm nay ăn gì?": chọn ngẫu nhiên 1 quán trong bán kính quanh tôi, Must try của tôi và / hoặc Must try của các nhóm chat */
+/** "Hôm nay ăn gì?": chọn ngẫu nhiên 1 quán trong bán kính quanh tôi, Yêu thích của tôi và / hoặc Yêu thích của các nhóm chat */
 export function WhatToEatSheet({ userPos, onClose, onOpenPlace, onDirections, onInvite }: Props) {
   const insets = useSafeAreaInsets();
   const mustTry = useMustTryIds();
@@ -167,7 +167,7 @@ export function WhatToEatSheet({ userPos, onClose, onOpenPlace, onDirections, on
     []
   );
 
-  // Nhóm chat của tôi (để chọn Must try của nhóm)
+  // Nhóm chat của tôi (để chọn Yêu thích của nhóm)
   useEffect(() => {
     let active = true;
     fetchConversations()
@@ -250,7 +250,7 @@ export function WhatToEatSheet({ userPos, onClose, onOpenPlace, onDirections, on
               <Source icon="navigate" label="Gần tôi" active={near} onPress={() => setNear((v) => !v)} />
               <Source
                 icon="heart"
-                label={`Must try của tôi${mustTry.size > 0 ? ` (${mustTry.size})` : ''}`}
+                label={`Yêu thích của tôi${mustTry.size > 0 ? ` (${mustTry.size})` : ''}`}
                 active={mine}
                 onPress={() => setMine((v) => !v)}
               />

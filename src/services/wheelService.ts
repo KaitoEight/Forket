@@ -33,20 +33,20 @@ export const WHEEL_MODES: Record<
   { label: string; hint: string; defaultTitle: string; icon: 'cash-outline' | 'restaurant-outline' | 'trophy-outline' }
 > = {
   pay: {
-    label: 'Ai trả tiền?',
-    hint: 'Chọn người tham gia rồi quay — ai trúng thì trả tiền.',
+    label: 'Chọn người',
+    hint: 'Chọn người tham gia rồi quay — ai trúng là người được chọn (vd: ai trả tiền, ai đi mua nước…).',
     defaultTitle: 'Ai trả tiền?',
     icon: 'cash-outline',
   },
   food_elim: {
     label: 'Chọn món — loại dần',
-    hint: 'Mỗi người thêm 1 món. Mỗi lần quay loại 1 món, món cuối cùng thắng.',
+    hint: 'Mỗi người thêm nhiều món. Mỗi lần quay loại 1 món, món cuối cùng được chọn.',
     defaultTitle: 'Ăn gì đây?',
     icon: 'trophy-outline',
   },
   food_spin: {
     label: 'Chọn món — quay 1 lần',
-    hint: 'Mỗi người thêm 1 món. Quay một lần, món trúng là món được chọn.',
+    hint: 'Mỗi người thêm nhiều món. Quay một lần, món trúng là món được chọn.',
     defaultTitle: 'Ăn gì đây?',
     icon: 'restaurant-outline',
   },
@@ -98,15 +98,27 @@ export async function fetchWheels(messageIds: string[]): Promise<{ games: WheelG
   return { games, entries: (e.data ?? []) as WheelEntry[] };
 }
 
-/** Thêm / đổi món của tôi (mỗi người 1 món, khi đang gom món) */
-export async function setWheelEntry(gameId: string, label: string) {
-  const { error } = await supabase.rpc('set_wheel_entry', { gid: gameId, entry_label: label });
+/** Thêm 1 món (khi đang gom món). Mỗi người thêm nhiều món được, server chặn món trùng. */
+export async function addWheelEntry(gameId: string, label: string) {
+  const { error } = await supabase.rpc('add_wheel_entry', { gid: gameId, entry_label: label });
   if (error) throw wheelError(error);
 }
 
-export async function removeWheelEntry(gameId: string) {
-  const { error } = await supabase.rpc('remove_wheel_entry', { gid: gameId });
+/** Xoá 1 món: món của mình, hoặc của bất kỳ ai nếu là trưởng nhóm / người tạo vòng quay */
+export async function deleteWheelEntry(entryId: string) {
+  const { error } = await supabase.rpc('delete_wheel_entry', { entry_id: entryId });
   if (error) throw wheelError(error);
+}
+
+/** Cách hiển thị để so sánh trùng món: bỏ dấu, hoa thường, khoảng trắng thừa */
+export function wheelLabelKey(label: string) {
+  return label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Người tạo bấm "Bắt đầu" sau khi đủ món */

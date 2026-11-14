@@ -29,19 +29,19 @@ export function WheelMessageCard({ title, game, entries, mine, meId, onOpen }: P
   const active = entries.filter((e) => e.eliminated_order == null);
   const winner = game.winner_entry ? entries.find((e) => e.id === game.winner_entry) : undefined;
   const isFood = game.mode !== 'pay';
-  const myEntry = entries.find((e) => e.user_id === meId);
+  const myCount = entries.filter((e) => e.user_id === meId).length;
 
   let status: string;
   let action: string;
   if (game.status === 'done' && winner) {
-    status = isFood ? `🍽️ ${winner.label}` : `🎉 ${winner.label} trả tiền`;
+    status = isFood ? `🍽️ ${winner.label}` : `🎉 ${winner.label} là người được chọn`;
     action = 'Xem vòng quay';
   } else if (game.status === 'ready') {
     status = game.mode === 'food_elim' ? `Còn ${active.length}/${entries.length} món` : `${entries.length} ${isFood ? 'món' : 'người'} đã sẵn sàng`;
     action = '🎡 Quay!';
   } else {
     status = entries.length === 0 ? 'Chưa ai thêm món' : `${entries.length} món đã thêm`;
-    action = myEntry ? 'Xem / đổi món' : 'Thêm món của bạn';
+    action = myCount > 0 ? 'Thêm / xem món' : 'Thêm món của bạn';
   }
 
   return (

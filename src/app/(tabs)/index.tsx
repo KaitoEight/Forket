@@ -28,7 +28,6 @@ import { PlaceEditSheet } from '@/components/PlaceEditSheet';
 import { PlaceReviews } from '@/components/PlaceReviews';
 import { MustTryButton } from '@/components/MustTryButton';
 import { WhatToEatSheet } from '@/components/WhatToEatSheet';
-import { WishButton } from '@/components/WishButton';
 import { useShake } from '@/hooks/useShake';
 import { StarRating } from '@/components/StarRating';
 import { placeInGroup, tagLabel, tagsInGroup, useCategories, type PlaceGroup } from '@/constants/placeTags';
@@ -36,7 +35,7 @@ import { colors, radius, shadow, statusBarStyle } from '@/constants/theme';
 import { useAuth, type Profile } from '@/lib/auth';
 import { fetchFriends } from '@/services/friendService';
 import { formatMoney } from '@/lib/money';
-import { useWishlistIds } from '@/services/wishlistService';
+import { useMustTryIds } from '@/services/mustTryService';
 import {
   deletePlace,
   distanceMeters,
@@ -129,7 +128,7 @@ export default function MapScreen() {
   const [subTag, setSubTag] = useState<string | null>(null);
   const [onlyPhotos, setOnlyPhotos] = useState(false);
   const [onlyTop, setOnlyTop] = useState(false);
-  const [onlyWish, setOnlyWish] = useState(false);
+  const [onlyFav, setOnlyFav] = useState(false);
   const [people, setPeople] = useState<string[]>([]);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [friends, setFriends] = useState<Profile[]>([]);
@@ -137,7 +136,7 @@ export default function MapScreen() {
   const [visitedLoading, setVisitedLoading] = useState(false);
 
   const categories = useCategories();
-  const wishIds = useWishlistIds();
+  const favIds = useMustTryIds();
 
   // Lắc máy → "Hôm nay ăn gì?" (chỉ khi tab Bản đồ đang mở và không có bảng nào đè lên)
   const focused = useIsFocused();
@@ -231,10 +230,10 @@ export default function MapScreen() {
         } else if (group && !placeInGroup(p.tags, group)) return false;
         if (onlyPhotos && p.post_count === 0) return false;
         if (onlyTop && (p.avg_rating ?? 0) < 4) return false;
-        if (onlyWish && !wishIds.has(p.id)) return false;
+        if (onlyFav && !favIds.has(p.id)) return false;
         return true;
       }),
-    [places, visitedBy, group, subTag, onlyPhotos, onlyTop, onlyWish, wishIds]
+    [places, visitedBy, group, subTag, onlyPhotos, onlyTop, onlyFav, favIds]
   );
 
   const addPlaces = (list: MapPlace[]) => {
@@ -586,18 +585,18 @@ export default function MapScreen() {
     setGroup((cur) => (cur === g ? null : g));
   };
 
-  const filterActive = group || onlyPhotos || onlyTop || onlyWish || people.length > 0;
+  const filterActive = group || onlyPhotos || onlyTop || onlyFav || people.length > 0;
 
-  // Bật lọc "Muốn đi": tải các quán đã lưu (kể cả ngoài vùng đang xem) rồi bay tới quán gần nhất
-  const toggleWishFilter = () => {
-    const on = !onlyWish;
-    setOnlyWish(on);
+  // Bật lọc "Yêu thích": tải các quán đã lưu (kể cả ngoài vùng đang xem) rồi bay tới quán gần nhất
+  const toggleFavFilter = () => {
+    const on = !onlyFav;
+    setOnlyFav(on);
     if (!on) return;
-    const missing = [...wishIds].filter((id) => !placesById.has(id));
+    const missing = [...favIds].filter((id) => !placesById.has(id));
     fetchPlacesByIds(missing)
       .then((fetched) => {
         addPlaces(fetched);
-        const all = [...[...wishIds].map((id) => placesById.get(id)).filter(Boolean), ...fetched] as MapPlace[];
+        const all = [...[...favIds].map((id) => placesById.get(id)).filter(Boolean), ...fetched] as MapPlace[];
         const v = viewport.current;
         if (all.length > 0 && v && !all.some((p) => inBounds(v, p))) {
           const ref = userPos ?? { latitude: all[0].lat, longitude: all[0].lng };
@@ -609,7 +608,7 @@ export default function MapScreen() {
           mapRef.current?.focus(nearest.lat, nearest.lng, 14);
         }
       })
-      .catch((e) => console.warn('Không tải được quán Muốn đi:', e));
+      .catch((e) => console.warn('Không tải được quán Yêu thích:', e));
   };
 
   return (
@@ -691,7 +690,7 @@ export default function MapScreen() {
                   onPress={() => chooseGroup(g.key)}
                 />
               ))}
-              <Chip icon="bookmark" label="Muốn đi" active={onlyWish} onPress={toggleWishFilter} />
+              <Chip icon="heart" label="Yêu thích" active={onlyFav} onPress={toggleFavFilter} />
               <Chip icon="camera" label="Có ảnh" active={onlyPhotos} onPress={() => setOnlyPhotos((v) => !v)} />
               <Chip icon="star" label="Ngon 4★+" active={onlyTop} onPress={() => setOnlyTop((v) => !v)} />
               {filterActive && (
@@ -703,7 +702,7 @@ export default function MapScreen() {
                     setSubTag(null);
                     setOnlyPhotos(false);
                     setOnlyTop(false);
-                    setOnlyWish(false);
+                    setOnlyFav(false);
                     applyPeople([]);
                   }}
                 />
@@ -896,7 +895,6 @@ export default function MapScreen() {
                   <Text style={styles.actionText}>Check-in</Text>
                 </Pressable>
                 <MustTryButton placeId={selected.id} compact />
-                <WishButton placeId={selected.id} compact />
                 <Pressable
                   style={[styles.actionBtn, styles.shareBtn]}
                   accessibilityLabel="Gửi vào chat"
